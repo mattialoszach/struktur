@@ -27,4 +27,4 @@ Native macOS organizer for students and young professionals. Swift 6.2+, SwiftUI
 
 ## Open work
 
-Recurring calendar blocks; custom daily/weekly goals over selected UID-linked items; live Apple exchange verification; broader drag/resize, accessibility, and reliability QA; production signing and submission. Recheck current code before treating this list as exhaustive or complete. Do not claim launch readiness solely because unit tests pass.
+Recurring calendar series and UID-linked goals are implemented. Remaining gates: consented live Apple exchange testing, broader hardware/VoiceOver QA, developer signing credentials, and owner-approved distribution/submission. Automatic two-way sync remains an optional product decision; current exchange is manual. Consult Documentation/Verification.md for evidence. Do not claim launch readiness solely because unit tests pass.
