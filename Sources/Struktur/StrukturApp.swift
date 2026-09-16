@@ -14,6 +14,9 @@ struct StrukturApp: App {
         .onAppear {
           delegate.store = store
           PreviewSupport.captureIfRequested()
+          #if DEBUG
+            AppleQARunner.runIfRequested()
+          #endif
         }
     }
     .windowStyle(.hiddenTitleBar)
