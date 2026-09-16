@@ -88,9 +88,8 @@ struct ProjectDetail: View {
   @State private var newEvent = false
   private var tasks: [TaskItem] { store.tasks.filter { $0.projectID == project.id } }
   private var entries: [CalendarEntry] {
-    store.entries.filter { $0.projectID == project.id && $0.end > Date() }.sorted {
-      $0.start < $1.start
-    }
+    store.calendarEntries(
+      in: DateInterval(start: Date(), end: Date().adding(days: 90)), projectID: project.id)
   }
   private var completion: Double {
     tasks.isEmpty ? 0 : Double(tasks.filter(\.isCompleted).count) / Double(tasks.count)
@@ -137,7 +136,7 @@ struct ProjectDetail: View {
             title: "Next moves", value: "\(tasks.filter { !$0.isCompleted }.count)",
             detail: "small steps toward the goal", color: .sky)
           ProjectMetric(
-            title: "Time made", value: "\(entries.count)", detail: "upcoming calendar blocks",
+            title: "Time made", value: "\(entries.count)", detail: "blocks in the next 90 days",
             color: .mint)
         }
         HStack(alignment: .top, spacing: 16) {

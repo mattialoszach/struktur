@@ -193,10 +193,7 @@ struct MonthDayCell: View {
   }
 
   private func entries(on day: Date) -> [CalendarEntry] {
-    store.entries.filter {
-      $0.start < day.startOfDay.adding(days: 1) && $0.end > day.startOfDay
-        && (projectID == nil || $0.projectID == projectID)
-    }.sorted { $0.start < $1.start }
+    store.calendarEntries(on: day, projectID: projectID)
   }
   private func tasks(on day: Date) -> [TaskItem] {
     store.tasks(on: day, includeOverdue: false, projectID: projectID)
@@ -250,10 +247,7 @@ struct AgendaCalendar: View {
   }
 
   private func entries(on day: Date) -> [CalendarEntry] {
-    store.entries.filter {
-      $0.start < day.startOfDay.adding(days: 1) && $0.end > day.startOfDay
-        && (projectID == nil || $0.projectID == projectID)
-    }.sorted { $0.start < $1.start }
+    store.calendarEntries(on: day, projectID: projectID)
   }
   private func tasks(on day: Date) -> [TaskItem] {
     store.tasks(on: day, includeOverdue: false, projectID: projectID)

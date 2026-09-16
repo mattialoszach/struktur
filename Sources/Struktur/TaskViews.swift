@@ -14,14 +14,15 @@ struct TasksPage: View {
   @State private var showingNewTask = false
 
   private var filteredTasks: [TaskItem] {
-    store.tasks.filter { task in
+    let candidates = filter == .today ? store.tasks(on: Date()) : store.tasks
+    return candidates.filter { task in
       let matchesSearch =
         searchText.isEmpty || task.title.localizedCaseInsensitiveContains(searchText)
         || task.notes.localizedCaseInsensitiveContains(searchText)
       guard matchesSearch else { return false }
       switch filter {
       case .today:
-        return store.tasks(on: Date()).contains { $0.id == task.id }
+        return true
       case .upcoming:
         return !task.isCompleted
           && (task.dueDate ?? task.plannedStart).map { $0 > Date().endOfDay } == true
@@ -105,6 +106,7 @@ struct TaskRow: View {
   @EnvironmentObject private var store: WorkspaceStore
   let task: TaskItem
   var compact = false
+  @State private var accessibleEditor = false
 
   var body: some View {
     HStack(spacing: 12) {
@@ -158,6 +160,9 @@ struct TaskRow: View {
     )
     .contentShape(Rectangle())
     .draggable("struktur-task:\(task.id.uuidString)")
+    .accessibilityElement(children: .contain)
+    .accessibilityAction(named: "Edit task") { accessibleEditor = true }
+    .sheet(isPresented: $accessibleEditor) { TaskEditorSheet(task: task) }
   }
 
   private func dueLabel(_ date: Date) -> String {
@@ -237,6 +242,19 @@ struct TaskEditorSheet: View {
   @State private var showingPreview = false
   private let isNew: Bool
 
+  private var linkableEntries: [CalendarEntry] {
+    let around = draft.plannedStart ?? draft.dueDate ?? Date()
+    var choices = store.calendarEntries(
+      in: DateInterval(start: around.adding(days: -30), end: around.adding(days: 90)),
+      projectID: draft.projectID)
+    if let id = draft.linkedEventID, !choices.contains(where: { $0.id == id }),
+      let linked = store.resolveEntry(id)
+    {
+      choices.insert(linked, at: 0)
+    }
+    return choices
+  }
+
   init(task: TaskItem? = nil, projectID: UUID? = nil) {
     let value =
       task
@@ -303,21 +321,20 @@ struct TaskEditorSheet: View {
           Picker("Related calendar block", selection: $draft.linkedEventID) {
             Text("No linked block").tag(UUID?.none)
             ForEach(
-              store.entries.filter { draft.projectID == nil || $0.projectID == draft.projectID }
-                .sorted { $0.start < $1.start }
+              linkableEntries
             ) {
               Text($0.title + " · " + $0.start.formatted(.dateTime.day().month(.abbreviated))).tag(
                 Optional($0.id))
             }
           }
           .onChange(of: draft.linkedEventID) { _, id in
-            if let entry = store.entries.first(where: { $0.id == id }), draft.projectID == nil {
+            if let id, let entry = store.resolveEntry(id), draft.projectID == nil {
               draft.projectID = entry.projectID
             }
           }
           .onChange(of: draft.projectID) { _, id in
             if let linked = draft.linkedEventID,
-              let entry = store.entries.first(where: { $0.id == linked }),
+              let entry = store.resolveEntry(linked),
               id != nil && entry.projectID != id
             {
               draft.linkedEventID = nil
@@ -363,7 +380,7 @@ struct TaskEditorSheet: View {
         }
       }
     }
-    .frame(width: 680, height: 650).background(StrukturTheme.canvas)
+    .frame(width: 680, height: 650).background(StrukturTheme.canvas).tint(StrukturTheme.darkButton)
   }
 }
 

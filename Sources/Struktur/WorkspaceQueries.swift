@@ -2,7 +2,7 @@ import Foundation
 
 extension Workspace {
   func validate() throws {
-    guard schemaVersion <= 2 else {
+    guard (1...3).contains(schemaVersion) else {
       throw WorkspaceValidationError.invalid(
         "This workspace was created by a newer version of Struktur.")
     }
@@ -26,12 +26,52 @@ extension Workspace {
           "The widget layout contains invalid sizes or duplicate identifiers.")
       }
     }
+    for event in calendarEntries {
+      if let rule = event.recurrence {
+        guard (1...52).contains(rule.interval), rule.weekdays.allSatisfy({ (1...7).contains($0) }),
+          rule.count.map({ (1...1_000_000).contains($0) }) ?? true,
+          rule.until.map({ $0 >= rule.calendar.startOfDay(for: event.start) }) ?? true,
+          TimeZone(identifier: rule.timeZoneIdentifier) != nil, event.seriesID == nil,
+          (event.excludedOccurrences ?? []).allSatisfy({ $0 >= 0 && $0 <= 1_000_000 })
+        else {
+          throw WorkspaceValidationError.invalid("A calendar repeat rule is invalid.")
+        }
+      }
+      if let seriesID = event.seriesID {
+        guard
+          let master = calendarEntries.first(where: { $0.id == seriesID && $0.recurrence != nil }),
+          let index = event.occurrenceIndex, (0...1_000_000).contains(index),
+          master.occurrenceID(at: index) == event.id
+        else {
+          throw WorkspaceValidationError.invalid(
+            "A calendar exception has an invalid series reference.")
+        }
+      }
+    }
+    let tracked = goals ?? []
+    guard Set(tracked.map(\.id)).count == tracked.count,
+      tracked.allSatisfy({
+        !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          && (1...100_000).contains($0.target)
+      })
+    else {
+      throw WorkspaceValidationError.invalid(
+        "A goal has an invalid title, target, or duplicate identifier.")
+    }
     if let session = focusSession {
       guard session.duration.isFinite, (60...10800).contains(session.duration),
+        (session.endDate != nil) != (session.pausedRemaining != nil),
         session.pausedRemaining.map({ $0.isFinite && (0...session.duration).contains($0) }) ?? true
       else {
         throw WorkspaceValidationError.invalid("The focus session has an invalid duration.")
       }
+    }
+    let history = focusHistory ?? []
+    guard Set(history.map(\.id)).count == history.count,
+      history.allSatisfy({ $0.seconds.isFinite && (0...10800).contains($0.seconds) })
+    else {
+      throw WorkspaceValidationError.invalid(
+        "Focus history contains invalid durations or duplicate sessions.")
     }
   }
 }
@@ -78,17 +118,23 @@ extension WorkspaceStore {
     setWidgets(layout)
   }
 
+  func reorderWidget(_ id: UUID, to position: Int) {
+    var layout = widgets
+    guard let source = layout.firstIndex(where: { $0.id == id }) else { return }
+    let item = layout.remove(at: source)
+    layout.insert(item, at: max(0, min(layout.count, position)))
+    setWidgets(layout)
+  }
+
   func blocks(on day: Date, projectID: UUID? = nil) -> [DayBlock] {
     let start = day.startOfDay
     let end = start.adding(days: 1)
-    let events = entries.filter {
-      $0.start < end && $0.end > start && (projectID == nil || $0.projectID == projectID)
-    }
-    .map {
-      DayBlock(
-        id: $0.id, title: $0.title, start: $0.start, end: $0.end,
-        color: project($0.projectID)?.color ?? $0.color, projectID: $0.projectID, entry: $0)
-    }
+    let events = calendarEntries(in: DateInterval(start: start, end: end), projectID: projectID)
+      .map {
+        DayBlock(
+          id: $0.id, title: $0.title, start: $0.start, end: $0.end,
+          color: project($0.projectID)?.color ?? $0.color, projectID: $0.projectID, entry: $0)
+      }
     let planned = tasks.compactMap { task -> DayBlock? in
       guard !task.isCompleted, let time = task.plannedStart,
         projectID == nil || task.projectID == projectID

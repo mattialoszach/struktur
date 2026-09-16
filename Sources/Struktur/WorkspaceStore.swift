@@ -9,6 +9,7 @@ final class WorkspaceStore: ObservableObject {
   private let fileURL: URL
   private var saveTask: Task<Void, Never>?
   private var recoveryRequired = false
+  private var migrationBackupRequired = false
 
   init(fileURL: URL? = nil) {
     self.fileURL = fileURL ?? Self.defaultFileURL
@@ -19,6 +20,7 @@ final class WorkspaceStore: ObservableObject {
         let decoded = try JSONDecoder.struktur.decode(Workspace.self, from: data)
         try decoded.validate()
         workspace = decoded
+        migrationBackupRequired = decoded.schemaVersion < 3
       } catch {
         workspace = Workspace()
         recoveryRequired = true
@@ -51,17 +53,102 @@ final class WorkspaceStore: ObservableObject {
   }
 
   func update(_ entry: CalendarEntry) {
+    if entry.seriesID != nil {
+      if let index = workspace.calendarEntries.firstIndex(where: { $0.id == entry.id }) {
+        workspace.calendarEntries[index] = entry
+      } else {
+        workspace.calendarEntries.append(entry)
+      }
+      changed()
+      return
+    }
     guard let index = workspace.calendarEntries.firstIndex(where: { $0.id == entry.id }) else {
       return
     }
+    var entry = entry
+    if entry.recurrence != nil {
+      // Cancellation metadata is store-owned; a previously opened editor must not resurrect it.
+      entry.excludedOccurrences = Array(
+        Set(
+          (workspace.calendarEntries[index].excludedOccurrences ?? [])
+            + (entry.excludedOccurrences ?? []))
+      ).sorted()
+    }
     workspace.calendarEntries[index] = entry
+    if entry.recurrence == nil {
+      for index in workspace.calendarEntries.indices
+      where workspace.calendarEntries[index].seriesID == entry.id {
+        workspace.calendarEntries[index].seriesID = nil
+        workspace.calendarEntries[index].occurrenceIndex = nil
+      }
+    }
+    // Shortening or stopping a series must not leave tasks pointing at missing occurrences.
+    for index in workspace.tasks.indices {
+      if let linked = workspace.tasks[index].linkedEventID,
+        entry.index(for: linked) != nil, resolveEntry(linked) == nil
+      {
+        workspace.tasks[index].linkedEventID = nil
+      }
+    }
     changed()
   }
 
   func removeEntry(id: UUID) {
-    workspace.calendarEntries.removeAll { $0.id == id }
-    for index in workspace.tasks.indices where workspace.tasks[index].linkedEventID == id {
+    let master = entries.first { $0.id == id && $0.recurrence != nil }
+    let removedIDs = Set(entries.filter { $0.id == id || $0.seriesID == id }.map(\.id))
+    workspace.calendarEntries.removeAll { $0.id == id || $0.seriesID == id }
+    for index in workspace.tasks.indices
+    where workspace.tasks[index].linkedEventID.map({
+      removedIDs.contains($0) || master?.index(for: $0) != nil
+    }) == true {
       workspace.tasks[index].linkedEventID = nil
+    }
+    changed()
+  }
+
+  func deleteOccurrence(_ entry: CalendarEntry) {
+    guard let seriesID = entry.seriesID, let occurrence = entry.occurrenceIndex,
+      let index = workspace.calendarEntries.firstIndex(where: { $0.id == seriesID })
+    else {
+      removeEntry(id: entry.id)
+      return
+    }
+    workspace.calendarEntries[index].excludedOccurrences = Array(
+      Set((workspace.calendarEntries[index].excludedOccurrences ?? []) + [occurrence]))
+    workspace.calendarEntries.removeAll { $0.id == entry.id }
+    for index in workspace.tasks.indices where workspace.tasks[index].linkedEventID == entry.id {
+      workspace.tasks[index].linkedEventID = nil
+    }
+    changed()
+  }
+
+  func saveGoal(_ goal: TrackedGoal) {
+    var goals = workspace.goals ?? []
+    if let index = goals.firstIndex(where: { $0.id == goal.id }) {
+      goals[index] = goal
+    } else {
+      goals.append(goal)
+    }
+    workspace.goals = goals
+    changed()
+  }
+
+  func recordAppleEventExport(_ id: UUID, identifier: String) {
+    if let index = workspace.calendarEntries.firstIndex(where: { $0.id == id }) {
+      workspace.calendarEntries[index].externalIdentifier = identifier
+    } else {
+      if workspace.appleEventLinks == nil { workspace.appleEventLinks = [:] }
+      workspace.appleEventLinks?[id.uuidString] = identifier
+    }
+    changed()
+  }
+
+  func removeGoal(_ id: UUID) {
+    workspace.goals?.removeAll { $0.id == id }
+    workspace.preferences.widgetLayout = workspace.preferences.widgetLayout?.map {
+      var widget = $0
+      if widget.goalID == id { widget.goalID = nil }
+      return widget
     }
     changed()
   }
@@ -140,6 +227,7 @@ final class WorkspaceStore: ObservableObject {
 
   func replaceWorkspace(_ newWorkspace: Workspace) {
     recoveryRequired = false
+    migrationBackupRequired = false
     workspace = newWorkspace
     changed()
   }
@@ -150,6 +238,23 @@ final class WorkspaceStore: ObservableObject {
     subset.projects = workspace.projects.filter { $0.id == projectID }
     subset.tasks = workspace.tasks.filter { $0.projectID == projectID }
     subset.calendarEntries = workspace.calendarEntries.filter { $0.projectID == projectID }
+    let selectedSeries = Set(subset.calendarEntries.filter { $0.recurrence != nil }.map(\.id))
+    subset.calendarEntries = subset.calendarEntries.map { entry in
+      var copy = entry
+      if let seriesID = copy.seriesID, !selectedSeries.contains(seriesID) {
+        // A moved exception belongs to this space, but its series does not.
+        copy.seriesID = nil
+        copy.occurrenceIndex = nil
+      }
+      if copy.recurrence != nil {
+        // Do not regenerate occurrences whose exceptions belong to a different space.
+        let omitted = workspace.calendarEntries.filter {
+          $0.seriesID == copy.id && $0.projectID != projectID
+        }.compactMap(\.occurrenceIndex)
+        copy.excludedOccurrences = Array(Set((copy.excludedOccurrences ?? []) + omitted)).sorted()
+      }
+      return copy
+    }
     subset.scratchpad = ""
     subset.focusSession = nil
     subset.preferences.widgetLayout = subset.preferences.widgetLayout?.map { widget in
@@ -158,6 +263,30 @@ final class WorkspaceStore: ObservableObject {
       return copy
     }
     let taskIDs = Set(subset.tasks.map(\.id))
+    let eventIDs = Set(subset.calendarEntries.map(\.id))
+    subset.appleEventLinks = workspace.appleEventLinks?.filter {
+      UUID(uuidString: $0.key).flatMap { resolveEntry($0)?.projectID } == projectID
+    }
+    subset.tasks = subset.tasks.map {
+      var task = $0
+      if let linked = task.linkedEventID, !eventIDs.contains(linked),
+        resolveEntry(linked)?.projectID != projectID
+      {
+        task.linkedEventID = nil
+      }
+      return task
+    }
+    subset.goals = workspace.goals?.filter {
+      (!$0.taskIDs.isEmpty || !$0.projectIDs.isEmpty)
+        && $0.taskIDs.allSatisfy(taskIDs.contains)
+        && $0.projectIDs.allSatisfy { $0 == projectID }
+    }
+    let goalIDs = Set((subset.goals ?? []).map(\.id))
+    subset.preferences.widgetLayout = subset.preferences.widgetLayout?.map {
+      var widget = $0
+      if let id = widget.goalID, !goalIDs.contains(id) { widget.goalID = nil }
+      return widget
+    }
     subset.focusHistory = workspace.focusHistory?.filter { $0.taskID.map(taskIDs.contains) == true }
     return try JSONEncoder.struktur.encode(subset)
   }
@@ -177,6 +306,13 @@ final class WorkspaceStore: ObservableObject {
     saveTask?.cancel()
     guard !recoveryRequired else { return }
     do {
+      if migrationBackupRequired {
+        let backup = fileURL.deletingLastPathComponent().appending(
+          path: "workspace-before-v3-\(UUID().uuidString).json")
+        try FileManager.default.copyItem(at: fileURL, to: backup)
+        migrationBackupRequired = false
+      }
+      workspace.schemaVersion = 3
       let folder = fileURL.deletingLastPathComponent()
       try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
       try JSONEncoder.struktur.encode(workspace).write(to: fileURL, options: .atomic)

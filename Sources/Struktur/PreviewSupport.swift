@@ -5,14 +5,42 @@ extension WorkspaceStore {
   static func forLaunch() -> WorkspaceStore {
     #if DEBUG
       if ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW"] == "1" {
+        let requested = ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_ID"] ?? ""
+        let identifier =
+          requested.range(of: #"^[A-Za-z0-9-]{1,80}$"#, options: .regularExpression) != nil
+          ? requested : UUID().uuidString
         let directory = FileManager.default.temporaryDirectory.appending(
-          path: "struktur-preview-\(UUID().uuidString)")
+          path: "struktur-preview-\(identifier)")
+        let workspaceURL = directory.appending(path: "workspace.json")
+        let existed = FileManager.default.fileExists(atPath: workspaceURL.path)
         let store = WorkspaceStore(fileURL: directory.appending(path: "workspace.json"))
+        if existed {
+          FileHandle.standardOutput.write(
+            Data(
+              "Restored preview PID: \(ProcessInfo.processInfo.processIdentifier); workspace: \(workspaceURL.path)\n"
+                .utf8))
+          return store
+        }
         var sample = sampleWorkspace()
         sample.preferences.appearance =
           ProcessInfo.processInfo.environment["STRUKTUR_THEME"] == "dark" ? .dark : .light
         sample.preferences.widgetLayout = WidgetConfiguration.starterLayout
+        if ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_FIXTURE"] == "completion" {
+          let anchor = Date().setting(hour: 9)
+          sample.calendarEntries.append(
+            CalendarEntry(
+              title: "Weekly lecture QA", start: anchor,
+              end: anchor.addingTimeInterval(3600), kind: .lecture,
+              projectID: sample.projects.first?.id, recurrence: CalendarRecurrence()))
+          sample.goals = [
+            TrackedGoal(title: "Five small steps", projectIDs: sample.projects.prefix(1).map(\.id))
+          ]
+        }
         store.replaceWorkspace(sample)
+        FileHandle.standardOutput.write(
+          Data(
+            "Preview PID: \(ProcessInfo.processInfo.processIdentifier); workspace: \(directory.appending(path: "workspace.json").path)\n"
+              .utf8))
         return store
       }
     #endif
@@ -22,8 +50,37 @@ extension WorkspaceStore {
 
 enum PreviewSupport {
   @MainActor private static var observer: NSObjectProtocol?
+  @MainActor private static var eventObserver: Any?
+  @MainActor private static var replayObserver: NSObjectProtocol?
   @MainActor static func captureIfRequested() {
     #if DEBUG
+      if replayObserver == nil && ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW"] == "1" {
+        replayObserver = DistributedNotificationCenter.default().addObserver(
+          forName: Notification.Name("app.struktur.preview.replay"),
+          object: String(ProcessInfo.processInfo.processIdentifier), queue: .main
+        ) { notification in
+          let info = notification.userInfo ?? [:]
+          guard let x = info["x"] as? Double, let y = info["y"] as? Double,
+            let endX = info["endX"] as? Double, let endY = info["endY"] as? Double
+          else { return }
+          DispatchQueue.main.async {
+            replayDrag(from: CGPoint(x: x, y: y), to: CGPoint(x: endX, y: endY))
+          }
+        }
+      }
+      if eventObserver == nil
+        && ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_EVENTS"] == "1"
+      {
+        eventObserver = NSEvent.addLocalMonitorForEvents(matching: [
+          .leftMouseDown, .leftMouseDragged, .leftMouseUp,
+        ]) { event in
+          FileHandle.standardOutput.write(
+            Data(
+              "Pointer \(event.type.rawValue) at \(event.locationInWindow), window \(event.windowNumber)\n"
+                .utf8))
+          return event
+        }
+      }
       guard let destination = ProcessInfo.processInfo.environment["STRUKTUR_SNAPSHOT"] else {
         return
       }
@@ -61,4 +118,37 @@ enum PreviewSupport {
       }
     #endif
   }
+
+  #if DEBUG
+    @MainActor private static func replayDrag(from start: CGPoint, to finish: CGPoint) {
+      guard
+        let window = NSApplication.shared.windows.first(where: {
+          $0.styleMask.contains(.resizable) && !$0.isSheet
+        }),
+        CGRect(origin: .zero, size: window.frame.size).contains(start),
+        CGRect(origin: .zero, size: window.frame.size).contains(finish)
+      else { return }
+      window.makeKeyAndOrderFront(nil)
+      func enqueue(_ type: NSEvent.EventType, at point: CGPoint, delay: Double) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+          guard
+            let event = NSEvent.mouseEvent(
+              with: type, location: point, modifierFlags: [],
+              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+              context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)
+          else { return }
+          NSApplication.shared.postEvent(event, atStart: false)
+        }
+      }
+      enqueue(.leftMouseDown, at: start, delay: 0.1)
+      for step in 1...40 {
+        let t = CGFloat(step) / 40
+        enqueue(
+          .leftMouseDragged,
+          at: CGPoint(x: start.x + (finish.x - start.x) * t, y: start.y + (finish.y - start.y) * t),
+          delay: 0.25 + Double(step) * 0.025)
+      }
+      enqueue(.leftMouseUp, at: finish, delay: 1.35)
+    }
+  #endif
 }

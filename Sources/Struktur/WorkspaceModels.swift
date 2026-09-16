@@ -32,6 +32,7 @@ struct WidgetConfiguration: Identifiable, Codable, Equatable {
   var columns = 1
   var rows = 1
   var projectID: UUID?
+  var goalID: UUID?
 
   static var starterLayout: [Self] {
     [
@@ -55,6 +56,7 @@ extension DashboardWidgetKind {
     case .upcoming: "The next calendar block, and exactly when it ends."
     case .projectPulse: "Pin a space and watch its goal take shape."
     case .quickNote: "A small home for big ideas, with live Markdown checklists."
+    case .goals: "Daily, weekly, or ongoing goals linked to the tasks you choose."
     }
   }
   var accent: AccentToken {

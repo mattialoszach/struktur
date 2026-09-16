@@ -15,7 +15,7 @@ enum StrukturTheme {
   static let surface = adaptive(0xFDFDF9, 0x272C28)
   static let sidebar = adaptive(0xEEF0E9, 0x181C19)
   static let ink = adaptive(0x2B332D, 0xE9EBE3)
-  static let muted = adaptive(0x83887E, 0xA1AA9F)
+  static let muted = adaptive(0x697063, 0xA9B3A6)
   static let hairline = adaptive(0xE3E6DD, 0x394138)
   static let darkButton = adaptive(0x303B30, 0xDCE7D5)
   static let buttonText = adaptive(0xF8F9F2, 0x202A20)
@@ -50,6 +50,7 @@ extension View {
 }
 
 struct StrukturButtonStyle: ButtonStyle {
+  @Environment(\.isEnabled) private var isEnabled
   var primary = false
   var compact = false
   func makeBody(configuration: Configuration) -> some View {
@@ -64,7 +65,7 @@ struct StrukturButtonStyle: ButtonStyle {
       .overlay {
         if !primary { RoundedRectangle(cornerRadius: 9).strokeBorder(StrukturTheme.hairline) }
       }
-      .opacity(configuration.isPressed ? 0.7 : 1)
+      .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.45)
       .contentShape(RoundedRectangle(cornerRadius: 9))
   }
 }

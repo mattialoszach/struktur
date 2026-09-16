@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 enum AppSection: String, CaseIterable, Identifiable {
-  case overview, calendar, tasks, projects, focus, insights, settings
+  case overview, calendar, tasks, projects, goals, focus, insights, settings
 
   var id: String { rawValue }
   var title: String {
@@ -22,6 +22,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case .projects: "square.stack.3d.up"
     case .focus: "timer"
     case .insights: "chart.xyaxis.line"
+    case .goals: "scope"
     case .settings: "slider.horizontal.3"
     }
   }
@@ -141,6 +142,10 @@ struct CalendarEntry: Identifiable, Codable, Hashable {
   var location: String = ""
   var isAllDay = false
   var externalIdentifier: String?
+  var recurrence: CalendarRecurrence?
+  var seriesID: UUID?
+  var occurrenceIndex: Int?
+  var excludedOccurrences: [Int]?
 }
 
 struct TaskItem: Identifiable, Codable, Hashable {
@@ -164,7 +169,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
 
 enum DashboardWidgetKind: String, CaseIterable, Codable, Identifiable {
   case dayFlow, tasks, focus, deadlines, connections, momentum, todayProgress, upcoming,
-    projectPulse, quickNote
+    projectPulse, quickNote, goals
   var id: String { rawValue }
   var title: String {
     switch self {
@@ -178,6 +183,7 @@ enum DashboardWidgetKind: String, CaseIterable, Codable, Identifiable {
     case .upcoming: "Up next"
     case .projectPulse: "Project pulse"
     case .quickNote: "Quick note"
+    case .goals: "Goal tracker"
     }
   }
   var icon: String {
@@ -192,6 +198,7 @@ enum DashboardWidgetKind: String, CaseIterable, Codable, Identifiable {
     case .upcoming: "arrow.forward.circle.fill"
     case .projectPulse: "scope"
     case .quickNote: "note.text"
+    case .goals: "scope"
     }
   }
 }
@@ -267,10 +274,12 @@ struct Workspace: Codable, Equatable {
   var tasks: [TaskItem] = []
   var preferences = UserPreferences()
   var scratchpad = "# Capture\n\nWrite freely. Use **Markdown**, lists, and ideas."
-  var schemaVersion = 2
+  var schemaVersion = 3
   var focusSession: FocusSession?
   var focusHistory: [FocusRecord]?
   var isDemo: Bool?
+  var goals: [TrackedGoal]?
+  var appleEventLinks: [String: String]?
 }
 
 extension Calendar {

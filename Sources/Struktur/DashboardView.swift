@@ -8,6 +8,7 @@ struct DashboardView: View {
   @State private var customizing = false
   @State private var showingLibrary = false
   @State private var expanded: WidgetConfiguration?
+  @State private var availableWidth: CGFloat = 1100
 
   var body: some View {
     ScrollView {
@@ -19,11 +20,18 @@ struct DashboardView: View {
           ForEach(store.widgets) { widget in
             WidgetShell(
               configuration: widget, selectedDate: $selectedDate, customizing: customizing,
+              gridColumns: WidgetGridGeometry.columnCount(width: availableWidth),
+              reorder: { point in reorder(widget.id, at: point) },
               expand: { expanded = widget }
             )
             .layoutValue(key: WidgetColumnsKey.self, value: widget.columns)
             .layoutValue(key: WidgetRowsKey.self, value: widget.rows)
           }
+        }
+        .onGeometryChange(for: CGFloat.self) {
+          $0.size.width
+        } action: {
+          availableWidth = $0
         }
         if store.widgets.isEmpty {
           VStack(spacing: 16) {
@@ -50,6 +58,18 @@ struct DashboardView: View {
     .sheet(isPresented: $showingLibrary) { WidgetEditorSheet() }
     .sheet(item: $expanded) { widget in
       ExpandedWidgetView(configuration: widget, selectedDate: $selectedDate)
+    }
+  }
+
+  private func reorder(_ id: UUID, at localPoint: CGPoint) {
+    let frames = WidgetGridGeometry.frames(
+      width: availableWidth, sizes: store.widgets.map { ($0.columns, $0.rows) })
+    guard let source = store.widgets.firstIndex(where: { $0.id == id }) else { return }
+    let point = CGPoint(
+      x: frames[source].minX + 17 + localPoint.x,
+      y: frames[source].minY + 14.5 + localPoint.y)
+    if let target = frames.firstIndex(where: { $0.contains(point) }), target != source {
+      withAnimation(.snappy) { store.reorderWidget(id, to: target) }
     }
   }
 
@@ -167,6 +187,16 @@ enum WidgetGridGeometry {
   static let gap: CGFloat = 16
   static let rowHeight: CGFloat = 196
   static func columnCount(width: CGFloat) -> Int { width >= 1000 ? 4 : (width >= 780 ? 3 : 2) }
+  static func resized(
+    columns: Int, rows: Int, displayedColumns: Int, width: CGFloat, translation: CGSize
+  ) -> (columns: Int, rows: Int) {
+    let visible = max(1, min(columns, displayedColumns))
+    let unit = (max(1, width) + gap) / CGFloat(visible)
+    return (
+      max(1, min(4, visible + Int((translation.width / unit).rounded()))),
+      max(1, min(3, rows + Int((translation.height / (rowHeight + gap)).rounded())))
+    )
+  }
   static func frames(width: CGFloat, sizes: [(columns: Int, rows: Int)]) -> [CGRect] {
     let columns = columnCount(width: width)
     let cellWidth = max(1, (width - CGFloat(columns - 1) * gap) / CGFloat(columns))
@@ -224,6 +254,8 @@ struct WidgetShell: View {
   let configuration: WidgetConfiguration
   @Binding var selectedDate: Date
   var customizing: Bool
+  var gridColumns: Int
+  var reorder: (CGPoint) -> Void
   var expand: () -> Void
   @State private var dropTarget = false
   @State private var resizeTranslation = CGSize.zero
@@ -255,30 +287,46 @@ struct WidgetShell: View {
               StrukturTheme.surface, in: RoundedRectangle(cornerRadius: 7)
             )
             .padding(5)
-            .offset(x: resizeTranslation.width, y: resizeTranslation.height)
-            .gesture(
-              DragGesture(minimumDistance: 3)
-                .onChanged { resizeTranslation = $0.translation }
-                .onEnded { value in
-                  let unit = (geometry.size.width + 16) / CGFloat(configuration.columns)
-                  let columns =
-                    configuration.columns + Int((value.translation.width / unit).rounded())
-                  let rows = configuration.rows + Int((value.translation.height / 212).rounded())
+            .overlay {
+              NativeDragSurface(
+                changed: { resizeTranslation = $0 },
+                ended: { translation, _ in
+                  guard abs(translation.width) > 3 || abs(translation.height) > 3 else { return }
+                  let size = WidgetGridGeometry.resized(
+                    columns: configuration.columns, rows: configuration.rows,
+                    displayedColumns: gridColumns, width: geometry.size.width,
+                    translation: translation)
                   withAnimation(.snappy) {
-                    store.resizeWidget(configuration.id, columns: columns, rows: rows)
+                    store.resizeWidget(configuration.id, columns: size.columns, rows: size.rows)
                     resizeTranslation = .zero
                   }
-                }
-            )
+                }, cursor: .crosshair)
+            }
             .help("Drag to resize. More sizes are available in the widget menu.")
             .accessibilityLabel("Resize \(configuration.kind.title)")
+            .accessibilityValue("\(configuration.columns) columns, \(configuration.rows) rows")
+            .accessibilityAdjustableAction { direction in
+              if direction == .increment {
+                resize(configuration.columns, min(3, configuration.rows + 1))
+              } else if direction == .decrement {
+                resize(configuration.columns, max(1, configuration.rows - 1))
+              }
+            }
+            .accessibilityAction(named: "Make wider") {
+              resize(min(4, configuration.columns + 1), configuration.rows)
+            }
+            .accessibilityAction(named: "Make narrower") {
+              resize(max(1, configuration.columns - 1), configuration.rows)
+            }
         }
       }
       .dropDestination(for: String.self) { items, _ in
         guard customizing, let value = items.first, value.hasPrefix("struktur-widget:"),
           let id = UUID(uuidString: String(value.dropFirst(16)))
         else { return false }
-        withAnimation(.snappy) { store.moveWidget(id, before: configuration.id) }
+        if let position = store.widgets.firstIndex(where: { $0.id == configuration.id }) {
+          withAnimation(.snappy) { store.reorderWidget(id, to: position) }
+        }
         return true
       } isTargeted: {
         dropTarget = customizing && $0
@@ -303,7 +351,18 @@ struct WidgetShell: View {
           .font(.system(size: 10)).foregroundStyle(StrukturTheme.muted)
         Text(configuration.kind.title).font(.system(size: 11, weight: .medium)).lineLimit(1)
         Spacer(minLength: 0)
-      }.contentShape(Rectangle()).draggable("struktur-widget:\(configuration.id.uuidString)")
+      }.contentShape(Rectangle())
+        .overlay {
+          if customizing {
+            NativeDragSurface(ended: { translation, point in
+              if abs(translation.width) > 3 || abs(translation.height) > 3 { reorder(point) }
+            })
+          }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Move \(configuration.kind.title)")
+        .accessibilityAction(named: "Move earlier") { move(-1) }
+        .accessibilityAction(named: "Move later") { move(1) }
       IconButton(
         icon: "arrow.up.left.and.arrow.down.right", label: "Open \(configuration.kind.title)"
       ) { expand() }
@@ -421,7 +480,7 @@ struct WidgetEditorSheet: View {
                 height: 33, alignment: .top)
               Button {
                 let large = kind == .dayFlow || kind == .connections
-                let tall = kind == .dayFlow || kind == .tasks
+                let tall = kind == .dayFlow || kind == .tasks || kind == .goals
                 withAnimation {
                   store.setWidgets(
                     store.widgets + [

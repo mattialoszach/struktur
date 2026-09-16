@@ -2,6 +2,7 @@ import Combine
 import SwiftUI
 
 struct RootView: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @EnvironmentObject private var store: WorkspaceStore
   @State private var selection: AppSection = .overview
   @State private var quickCapture: QuickCaptureKind?
@@ -11,6 +12,9 @@ struct RootView: View {
   @State private var showingProject = false
   @State private var linkedTask: TaskItem?
   @State private var linkedEntry: CalendarEntry?
+  @State private var linkedGoal: TrackedGoal?
+  @State private var showingGoal = false
+  @State private var referenceNotFound = false
   private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
   var body: some View {
@@ -35,6 +39,12 @@ struct RootView: View {
     .background(StrukturTheme.canvas)
     .foregroundStyle(StrukturTheme.ink)
     .tint(StrukturTheme.darkButton)
+    .transaction {
+      if reduceMotion {
+        $0.animation = nil
+        $0.disablesAnimations = true
+      }
+    }
     .focusedValue(\.showQuickCapture) { quickCapture = $0 }
     .focusedValue(\.navigateToday) {
       selectedDate = Date()
@@ -55,6 +65,13 @@ struct RootView: View {
     }
     .sheet(item: $linkedTask) { TaskEditorSheet(task: $0) }
     .sheet(item: $linkedEntry) { EventEditorSheet(entry: $0) }
+    .sheet(item: $linkedGoal) { GoalEditorSheet(goal: $0) }
+    .sheet(isPresented: $showingGoal) { GoalEditorSheet() }
+    .alert("Reference not found", isPresented: $referenceNotFound) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text("This item may have been deleted or belongs to another workspace.")
+    }
     .onReceive(clock) { store.reconcileFocus(now: $0) }
     .onAppear {
       store.reconcileFocus()
@@ -69,11 +86,22 @@ struct RootView: View {
         return
       }
       switch url.host {
-      case "task": linkedTask = store.tasks.first { $0.id == id }
-      case "event": linkedEntry = store.entries.first { $0.id == id }
+      case "task":
+        linkedTask = store.tasks.first { $0.id == id }
+        referenceNotFound = linkedTask == nil
+      case "event":
+        linkedEntry = store.resolveEntry(id)
+        referenceNotFound = linkedEntry == nil
+      case "goal":
+        linkedGoal = store.goals.first { $0.id == id }
+        referenceNotFound = linkedGoal == nil
       case "space":
-        selectedProjectID = id
-        selection = .projects
+        if store.project(id) != nil {
+          selectedProjectID = id
+          selection = .projects
+        } else {
+          referenceNotFound = true
+        }
       default: break
       }
     }
@@ -114,6 +142,7 @@ struct RootView: View {
         Button("New task", systemImage: "checkmark.circle") { quickCapture = .task }
         Button("New calendar block", systemImage: "calendar") { quickCapture = .event }
         Button("New space", systemImage: "suit.club.fill") { showingProject = true }
+        Button("New goal", systemImage: "scope") { showingGoal = true }
       } label: {
         Label("Create", systemImage: "plus").font(.system(size: 11, weight: .medium))
       }
@@ -129,6 +158,7 @@ struct RootView: View {
     case .calendar: CalendarPage(selectedDate: $selectedDate)
     case .tasks: TasksPage()
     case .projects: ProjectsPage(selectedProjectID: $selectedProjectID)
+    case .goals: GoalsPage()
     case .focus: FocusPage()
     case .insights: InsightsPage()
     case .settings: PreferencesView()
@@ -351,6 +381,7 @@ struct SearchPanel: View {
   @State private var query = ""
   @State private var task: TaskItem?
   @State private var entry: CalendarEntry?
+  @State private var goal: TrackedGoal?
   @FocusState private var focused: Bool
 
   var body: some View {
@@ -386,7 +417,7 @@ struct SearchPanel: View {
                   icon: "checkmark.circle")
               }.buttonStyle(.plain)
             }
-            ForEach(store.entries.filter { matches($0.title + $0.notes + $0.id.uuidString) }) {
+            ForEach(matchingEntries) {
               item in
               Button {
                 entry = item
@@ -403,6 +434,16 @@ struct SearchPanel: View {
                 dismiss()
               } label: {
                 row(project.name, detail: "Space · \(project.goal)", icon: project.symbol.icon)
+              }.buttonStyle(.plain)
+            }
+            ForEach(store.goals.filter { matches($0.title + $0.detail + $0.id.uuidString) }) {
+              item in
+              Button {
+                goal = item
+              } label: {
+                row(
+                  item.title, detail: "\(item.period.title) goal · \(item.metric.title)",
+                  icon: "scope")
               }.buttonStyle(.plain)
             }
             if !hasMatches {
@@ -424,12 +465,27 @@ struct SearchPanel: View {
       .onAppear { focused = true }
       .sheet(item: $task) { TaskEditorSheet(task: $0) }
       .sheet(item: $entry) { EventEditorSheet(entry: $0) }
+      .sheet(item: $goal) { GoalEditorSheet(goal: $0) }
   }
-  private func matches(_ value: String) -> Bool { value.localizedCaseInsensitiveContains(query) }
+  private var normalizedQuery: String {
+    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let url = URL(string: trimmed), url.scheme == "struktur" { return url.lastPathComponent }
+    return trimmed
+  }
+  private var matchingEntries: [CalendarEntry] {
+    if let id = UUID(uuidString: normalizedQuery), let entry = store.resolveEntry(id) {
+      return [entry]
+    }
+    return store.entries.filter { matches($0.title + $0.notes + $0.id.uuidString) }
+  }
+  private func matches(_ value: String) -> Bool {
+    value.localizedCaseInsensitiveContains(normalizedQuery)
+  }
   private var hasMatches: Bool {
     store.tasks.contains { matches($0.title + $0.notes + $0.id.uuidString) }
-      || store.entries.contains { matches($0.title + $0.notes + $0.id.uuidString) }
+      || !matchingEntries.isEmpty
       || store.projects.contains { matches($0.name + $0.detail + $0.id.uuidString) }
+      || store.goals.contains { matches($0.title + $0.detail + $0.id.uuidString) }
   }
   private func row(_ title: String, detail: String, icon: String) -> some View {
     HStack(spacing: 12) {

@@ -18,6 +18,8 @@ struct WidgetContent: View {
     case .projectPulse:
       ProjectPulseWidget(projectID: configuration.projectID, widgetID: configuration.id)
     case .quickNote: NoteWidget(expanded: expanded)
+    case .goals:
+      GoalTrackerWidget(configuration: configuration, date: selectedDate, expanded: expanded)
     }
   }
 }
@@ -622,9 +624,7 @@ struct UpcomingWidget: View {
   @State private var editing: CalendarEntry?
   var body: some View {
     TimelineView(.periodic(from: .now, by: 30)) { context in
-      let next = store.entries.filter {
-        $0.end > context.date && (projectID == nil || $0.projectID == projectID)
-      }.sorted { $0.start < $1.start }.first
+      let next = store.nextCalendarEntry(after: context.date, projectID: projectID)
       VStack(alignment: .leading, spacing: 12) {
         if let next {
           Button {
@@ -633,8 +633,10 @@ struct UpcomingWidget: View {
             Text(next.title).font(.strukturSerif(22)).multilineTextAlignment(.leading)
           }.buttonStyle(.plain)
           Text(
-            next.start.formatted(.dateTime.weekday(.abbreviated).hour().minute()) + " – "
-              + next.end.formatted(.dateTime.hour().minute())
+            next.isAllDay
+              ? next.start.formatted(.dateTime.day().month(.abbreviated)) + " · All day"
+              : next.start.formatted(.dateTime.day().month(.abbreviated).hour().minute()) + " – "
+                + next.end.formatted(.dateTime.hour().minute())
           )
           .font(.caption).foregroundStyle(StrukturTheme.muted)
           TagPill(
