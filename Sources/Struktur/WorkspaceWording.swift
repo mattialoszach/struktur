@@ -24,7 +24,7 @@ enum WordingKey: String, CaseIterable {
     case .goalsSubtitle: "Track completed tasks and focus time."
     case .focusEyebrow: "Focus"
     case .focusTitle: "Time to focus."
-    case .focusSubtitle: "Choose a task, set a timer, and keep notes here."
+    case .focusSubtitle: "Focus, take notes, and return to saved sessions."
     case .insightsTitle: "Your week."
     case .insightsSubtitle: "Completed tasks and scheduled time."
     case .insightsFooter: "See where your time goes."

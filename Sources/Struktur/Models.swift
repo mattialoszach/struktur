@@ -279,6 +279,7 @@ struct Workspace: Codable, Equatable {
   var schemaVersion = 3
   var focusSession: FocusSession?
   var focusHistory: [FocusRecord]?
+  var focusDraftTitle: String?
   var isDemo: Bool?
   var goals: [TrackedGoal]?
   var appleEventLinks: [String: String]?

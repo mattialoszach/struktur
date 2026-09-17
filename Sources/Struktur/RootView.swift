@@ -82,27 +82,29 @@ struct RootView: View {
       }
     }
     .onOpenURL { url in
-      guard url.scheme == "struktur", let id = UUID(uuidString: url.lastPathComponent) else {
+      guard url.scheme?.lowercased() == "struktur" else { return }
+      guard let reference = WorkspaceReference(url: url), store.contains(reference) else {
+        referenceNotFound = true
         return
       }
-      switch url.host {
-      case "task":
+      let id = reference.id
+      switch reference.kind {
+      case .task:
         linkedTask = store.tasks.first { $0.id == id }
         referenceNotFound = linkedTask == nil
-      case "event":
+      case .event:
         linkedEntry = store.resolveEntry(id)
         referenceNotFound = linkedEntry == nil
-      case "goal":
+      case .goal:
         linkedGoal = store.goals.first { $0.id == id }
         referenceNotFound = linkedGoal == nil
-      case "space":
+      case .space:
         if store.project(id) != nil {
           selectedProjectID = id
           selection = .projects
         } else {
           referenceNotFound = true
         }
-      default: break
       }
     }
   }

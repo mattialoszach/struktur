@@ -230,7 +230,7 @@ if operation == "list" {
     let role = string(element, kAXRoleAttribute as CFString)
     if [
       "AXButton", "AXCheckBox", "AXTextField", "AXTextArea", "AXPopUpButton", "AXMenuButton",
-      "AXRadioButton", "AXMenuItem",
+      "AXRadioButton", "AXMenuItem", "AXLink",
     ].contains(role) {
       print("\(role): \(names(element).filter { !$0.isEmpty }.joined(separator: " | "))")
     }
@@ -240,7 +240,7 @@ if operation == "list" {
     let element = elements.last(where: {
       names($0).contains(label)
         && [
-          "AXButton", "AXCheckBox", "AXPopUpButton", "AXMenuButton", "AXRadioButton", "AXMenuItem",
+          "AXButton", "AXCheckBox", "AXPopUpButton", "AXMenuButton", "AXRadioButton", "AXMenuItem", "AXLink",
         ].contains(string($0, kAXRoleAttribute as CFString))
     })
   else { fail("No actionable element labeled \(label)") }

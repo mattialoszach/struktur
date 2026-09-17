@@ -350,23 +350,45 @@ struct FocusWidget: View {
     TimelineView(.periodic(from: .now, by: 1)) { context in
       let session = store.workspace.focusSession
       let remaining = session?.remaining(at: context.date) ?? TimeInterval(minutes * 60)
-      VStack(alignment: .leading, spacing: expanded ? 25 : 10) {
+      VStack(alignment: .leading, spacing: expanded ? 16 : 10) {
+        if expanded {
+          Text(session == nil ? "New session" : "Focus session")
+            .font(.strukturSerif(20, weight: .semibold)).frame(height: 28)
+          TextField("Session title (optional)", text: Binding(
+            get: { store.focusTitle }, set: { store.updateFocusTitle($0) }))
+            .textFieldStyle(.plain).font(.system(size: 13))
+            .padding(10).background(StrukturTheme.surface.opacity(0.65),
+              in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityLabel("Focus session title")
+        }
         HStack(alignment: .center) {
           VStack(alignment: .leading, spacing: 6) {
-            Text(session?.isPaused == true ? "Paused" : "Focus timer")
-              .font(.system(size: expanded ? 16 : 10)).foregroundStyle(StrukturTheme.muted)
+            if !expanded || session?.isPaused == true {
+              Text(session?.isPaused == true ? "Paused" : "Focus timer")
+                .font(.system(size: 10)).foregroundStyle(StrukturTheme.muted)
+            }
             Text(String(format: "%02d:%02d", Int(ceil(remaining)) / 60, Int(ceil(remaining)) % 60))
-              .font(.strukturSerif(expanded ? 82 : 39)).tracking(-2).monospacedDigit()
+              .font(.strukturSerif(expanded ? 64 : 39)).tracking(-2).monospacedDigit()
           }
           Spacer()
-          SuitIcon(symbol: .spade, color: .lilac, size: expanded ? 95 : 43).rotationEffect(
+          SuitIcon(symbol: .spade, color: .lilac, size: expanded ? 52 : 43).rotationEffect(
             .degrees(-12))
         }
         if expanded {
-          Picker("Focus on", selection: $taskID) {
-            Text("An open focus session").tag(UUID?.none)
-            ForEach(store.tasks.filter { !$0.isCompleted }) { Text($0.title).tag(Optional($0.id)) }
-          }.disabled(session != nil)
+          if session == nil {
+            VStack(alignment: .leading, spacing: 8) {
+              Text("Task (optional)").font(.caption).foregroundStyle(StrukturTheme.muted)
+              Picker("Focus on", selection: $taskID) {
+                Text("No linked task").tag(UUID?.none)
+                ForEach(store.tasks.filter { !$0.isCompleted }) { Text($0.title).tag(Optional($0.id)) }
+              }.labelsHidden().frame(maxWidth: .infinity)
+            }
+          } else {
+            if let task = store.tasks.first(where: { $0.id == session?.taskID }) {
+              Label(task.title, systemImage: "checkmark.circle")
+                .font(.caption).fixedSize(horizontal: false, vertical: true)
+            }
+          }
           StrukturOptions(label: "Session length", selection: $minutes, options: [25, 50, 90]) {
             "\($0) minutes"
           }.disabled(session != nil)
@@ -382,9 +404,10 @@ struct FocusWidget: View {
               )
               .frame(maxWidth: .infinity)
             }.buttonStyle(StrukturButtonStyle(primary: true, compact: !expanded))
-            IconButton(icon: "stop.fill", label: "End and save focus session") {
+            Button("Finish early") {
               store.finishFocus()
-            }
+            }.buttonStyle(StrukturButtonStyle(compact: !expanded))
+              .help("End the timer and save only the time you focused. Paused time is excluded.")
           } else {
             Button {
               store.startFocus(minutes: minutes, taskID: taskID)
@@ -410,23 +433,31 @@ struct FocusWidget: View {
           }
         }
         if expanded {
+          if session == nil, let last = store.workspace.focusHistory?.last {
+            let elapsed = last.seconds < 60 ? "\(Int(last.seconds))s" : durationText(last.seconds)
+            Label("Last session saved · \(elapsed)", systemImage: "checkmark.circle")
+              .font(.caption).foregroundStyle(StrukturTheme.muted)
+          }
           if let id = session?.taskID, let task = store.tasks.first(where: { $0.id == id }) {
-            Text(task.title).font(.strukturSerif(23))
-            Button(task.isCompleted ? "Task completed" : "Complete task") {
+            Button(task.isCompleted ? "Task completed" : "Complete task & finish") {
               if !task.isCompleted { store.toggleTask(id) }
               store.finishFocus()
             }.buttonStyle(StrukturButtonStyle()).disabled(task.isCompleted)
           }
-          Text("Your timer continues across the app and after relaunch.").font(.caption)
-            .foregroundStyle(StrukturTheme.muted)
-          Spacer()
         }
-      }.padding(.horizontal, expanded ? 36 : 17).padding(.top, expanded ? 30 : 0).padding(
-        .bottom, 16)
+      }.padding(.horizontal, expanded ? 20 : 17).padding(.top, expanded ? 20 : 0).padding(
+        .bottom, expanded ? 20 : 16)
     }
-    .onAppear { minutes = store.preferences.focusDurationMinutes ?? 25 }
+    .onAppear {
+      minutes = store.preferences.focusDurationMinutes ?? 25
+      taskID = store.workspace.focusSession?.taskID
+    }
+    .onChange(of: store.tasks.filter { !$0.isCompleted }.map(\.id)) { _, ids in
+      if let taskID, !ids.contains(taskID) { self.taskID = nil }
+    }
     .onChange(of: minutes) { _, value in store.updatePreferences { $0.focusDurationMinutes = value }
     }
+    .onDisappear { store.saveNow() }
   }
 }
 

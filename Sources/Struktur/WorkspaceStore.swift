@@ -5,6 +5,7 @@ import SwiftUI
 final class WorkspaceStore: ObservableObject {
   @Published private(set) var workspace: Workspace
   @Published var lastSaveError: String?
+  @Published private(set) var isSavePending = false
 
   private let fileURL: URL
   private var saveTask: Task<Void, Never>?
@@ -225,6 +226,55 @@ final class WorkspaceStore: ObservableObject {
     changed(debounce: true)
   }
 
+  func clearScratchpad() {
+    workspace.scratchpad = ""
+    changed()
+  }
+
+  var focusTitle: String {
+    workspace.focusSession?.title ?? workspace.focusDraftTitle ?? ""
+  }
+
+  func updateFocusTitle(_ value: String) {
+    if workspace.focusSession != nil {
+      workspace.focusSession?.title = value
+    } else {
+      workspace.focusDraftTitle = value
+    }
+    changed(debounce: true)
+  }
+
+  func focusRecordTitle(_ record: FocusRecord) -> String {
+    Self.normalizedFocusTitle(record.title)
+      ?? tasks.first { $0.id == record.taskID }?.title ?? "Focus session"
+  }
+
+  func savedFocusSessions(matching search: String = "") -> [FocusRecord] {
+    let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+    return (workspace.focusHistory ?? []).filter {
+      query.isEmpty || focusRecordTitle($0).localizedStandardContains(query)
+        || ($0.notes ?? "").localizedStandardContains(query)
+    }.sorted { $0.endedAt == $1.endedAt ? $0.id.uuidString < $1.id.uuidString : $0.endedAt > $1.endedAt }
+  }
+
+  func updateFocusRecord(id: UUID, title: String, notes: String) {
+    guard let index = workspace.focusHistory?.firstIndex(where: { $0.id == id }) else { return }
+    workspace.focusHistory?[index].title = Self.normalizedFocusTitle(title) ?? "Focus session"
+    workspace.focusHistory?[index].notes = notes
+    changed()
+  }
+
+  func removeFocusRecord(id: UUID) {
+    guard workspace.focusHistory?.contains(where: { $0.id == id }) == true else { return }
+    workspace.focusHistory?.removeAll { $0.id == id }
+    changed()
+  }
+
+  private static func normalizedFocusTitle(_ title: String?) -> String? {
+    let value = title?.split(whereSeparator: \.isWhitespace).joined(separator: " ") ?? ""
+    return value.isEmpty ? nil : value
+  }
+
   func replaceWorkspace(_ newWorkspace: Workspace) {
     recoveryRequired = false
     migrationBackupRequired = false
@@ -257,6 +307,7 @@ final class WorkspaceStore: ObservableObject {
     }
     subset.scratchpad = ""
     subset.focusSession = nil
+    subset.focusDraftTitle = nil
     subset.preferences.widgetLayout = subset.preferences.widgetLayout?.map { widget in
       var copy = widget
       if copy.projectID != projectID { copy.projectID = nil }
@@ -304,6 +355,7 @@ final class WorkspaceStore: ObservableObject {
 
   func saveNow() {
     saveTask?.cancel()
+    isSavePending = false
     guard !recoveryRequired else { return }
     do {
       if migrationBackupRequired {
@@ -326,11 +378,14 @@ final class WorkspaceStore: ObservableObject {
     guard workspace.focusSession == nil else { return }
     let duration = TimeInterval(max(1, min(180, minutes)) * 60)
     workspace.focusSession = FocusSession(
-      taskID: taskID, startedAt: now, duration: duration, endDate: now.addingTimeInterval(duration))
+      taskID: taskID, startedAt: now, duration: duration, endDate: now.addingTimeInterval(duration),
+      title: Self.normalizedFocusTitle(workspace.focusDraftTitle)
+        ?? tasks.first { $0.id == taskID }?.title)
     changed()
   }
 
   func toggleFocusPause(now: Date = Date()) {
+    reconcileFocus(now: now)
     guard var session = workspace.focusSession else { return }
     if session.isPaused {
       session.endDate = now.addingTimeInterval(session.remaining(at: now))
@@ -345,12 +400,17 @@ final class WorkspaceStore: ObservableObject {
 
   func finishFocus(completed: Bool = false, now: Date = Date()) {
     guard let session = workspace.focusSession else { return }
+    let completed = completed || (!session.isPaused && session.remaining(at: now) <= 0)
     let seconds = max(0, min(session.duration, session.duration - session.remaining(at: now)))
     let record = FocusRecord(
       id: session.id, taskID: session.taskID, endedAt: completed ? (session.endDate ?? now) : now,
-      seconds: seconds, completed: completed)
+      seconds: seconds, completed: completed,
+      title: Self.normalizedFocusTitle(session.title)
+        ?? tasks.first { $0.id == session.taskID }?.title ?? "Focus session",
+      notes: workspace.scratchpad)
     workspace.focusHistory = (workspace.focusHistory ?? []) + [record]
     workspace.focusSession = nil
+    workspace.focusDraftTitle = nil
     changed()
   }
 
@@ -364,6 +424,7 @@ final class WorkspaceStore: ObservableObject {
     objectWillChange.send()
     saveTask?.cancel()
     if debounce {
+      isSavePending = true
       saveTask = Task { [weak self] in
         try? await Task.sleep(for: .milliseconds(350))
         guard !Task.isCancelled else { return }

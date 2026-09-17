@@ -77,6 +77,7 @@ struct FocusSession: Codable, Equatable {
   var duration: TimeInterval
   var endDate: Date?
   var pausedRemaining: TimeInterval?
+  var title: String?
   func remaining(at date: Date) -> TimeInterval {
     max(0, pausedRemaining ?? endDate?.timeIntervalSince(date) ?? 0)
   }
@@ -89,6 +90,9 @@ struct FocusRecord: Identifiable, Codable, Equatable {
   var endedAt: Date
   var seconds: TimeInterval
   var completed: Bool
+  var title: String?
+  /// Nil identifies a legacy record, for which no notes were captured.
+  var notes: String?
 }
 
 struct DayBlock: Identifiable {

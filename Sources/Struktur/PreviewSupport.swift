@@ -208,14 +208,17 @@ enum PreviewSupport {
       else { return }
       window.makeKeyAndOrderFront(nil)
       NSApplication.shared.activate(ignoringOtherApps: true)
+      var target = window
+      while let sheet = target.attachedSheet { target = sheet }
+      let location = target.convertPoint(fromScreen: window.convertPoint(toScreen: point))
       for click in 1...count {
         for (index, type) in [NSEvent.EventType.leftMouseDown, .leftMouseUp].enumerated() {
           DispatchQueue.main.asyncAfter(
             deadline: .now() + Double(click) * 0.1 + Double(index) * 0.03
           ) {
             if let event = NSEvent.mouseEvent(
-              with: type, location: point, modifierFlags: [],
-              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+              with: type, location: location, modifierFlags: [],
+              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: target.windowNumber,
               context: nil, eventNumber: 0, clickCount: click, pressure: index == 0 ? 1 : 0)
             {
               NSApplication.shared.postEvent(event, atStart: false)
