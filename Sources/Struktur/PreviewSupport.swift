@@ -64,7 +64,9 @@ enum PreviewSupport {
             DispatchQueue.main.async { replayText(text) }
             return
           }
-          if let keyCode = info["keyCode"] as? Int, [36, 48, 53].contains(keyCode) {
+          if let keyCode = info["keyCode"] as? Int,
+            [36, 48, 53, 123, 124, 125, 126].contains(keyCode)
+          {
             DispatchQueue.main.async { replayKey(UInt16(keyCode)) }
             return
           }
@@ -77,8 +79,9 @@ enum PreviewSupport {
           guard let x = info["x"] as? Double, let y = info["y"] as? Double,
             let endX = info["endX"] as? Double, let endY = info["endY"] as? Double
           else { return }
+          let hold = info["hold"] as? Bool == true
           DispatchQueue.main.async {
-            replayDrag(from: CGPoint(x: x, y: y), to: CGPoint(x: endX, y: endY))
+            replayDrag(from: CGPoint(x: x, y: y), to: CGPoint(x: endX, y: endY), hold: hold)
           }
         }
       }
@@ -102,8 +105,11 @@ enum PreviewSupport {
         observer = DistributedNotificationCenter.default().addObserver(
           forName: Notification.Name("app.struktur.preview.capture"),
           object: String(ProcessInfo.processInfo.processIdentifier), queue: .main
-        ) { _ in
-          DispatchQueue.main.async { captureIfRequested() }
+        ) { notification in
+          let immediate = notification.userInfo?["immediate"] as? Bool == true
+          DispatchQueue.main.async {
+            if immediate { captureWindow(to: destination) } else { captureIfRequested() }
+          }
         }
       }
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
@@ -119,27 +125,48 @@ enum PreviewSupport {
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-          guard let view = window.attachedSheet?.contentView ?? window.contentView,
-            let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
-          else { return }
-          view.cacheDisplay(in: view.bounds, to: bitmap)
-          if let data = bitmap.representation(using: .png, properties: [:]) {
-            try? data.write(to: URL(fileURLWithPath: destination))
-            FileHandle.standardOutput.write(
-              Data("Snapshot: \(destination); window: \(window.windowNumber)\n".utf8))
-          }
+          captureWindow(to: destination)
         }
       }
     #endif
   }
 
   #if DEBUG
+    @MainActor private static func captureWindow(to destination: String) {
+      guard
+        let window = NSApplication.shared.windows.first(where: {
+          $0.contentView != nil && $0.styleMask.contains(.resizable) && !$0.isSheet
+        }),
+        let view = NSApplication.shared.windows.first(where: {
+          $0.isVisible && $0.className.contains("Popover")
+        })?.contentView ?? window.attachedSheet?.contentView ?? window.contentView,
+        let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+      else { return }
+      view.cacheDisplay(in: view.bounds, to: bitmap)
+      if let data = bitmap.representation(using: .png, properties: [:]) {
+        try? data.write(to: URL(fileURLWithPath: destination))
+        FileHandle.standardOutput.write(
+          Data("Snapshot: \(destination); window: \(window.windowNumber)\n".utf8))
+      }
+    }
+
     @MainActor private static func replayKey(_ code: UInt16) {
-      guard let window = previewTextField()?.window ?? NSApplication.shared.keyWindow else {
+      guard
+        let window = previewTextField()?.window ?? NSApplication.shared.keyWindow
+          ?? NSApplication.shared.windows.first(where: {
+            $0.isVisible && $0.styleMask.contains(.resizable)
+          })
+      else {
         return
       }
+      window.makeKeyAndOrderFront(nil)
+      NSApplication.shared.activate(ignoringOtherApps: true)
       for type in [NSEvent.EventType.keyDown, .keyUp] {
-        let character = code == 36 ? "\r" : (code == 48 ? "\t" : "\u{1b}")
+        let character =
+          [
+            36: "\r", 48: "\t", 53: "\u{1b}", 123: "\u{f702}", 124: "\u{f703}",
+            125: "\u{f701}", 126: "\u{f700}",
+          ][Int(code)] ?? ""
         if let event = NSEvent.keyEvent(
           with: type, location: .zero, modifierFlags: [],
           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
@@ -198,7 +225,7 @@ enum PreviewSupport {
       }
     }
 
-    @MainActor private static func replayDrag(from start: CGPoint, to finish: CGPoint) {
+    @MainActor private static func replayDrag(from start: CGPoint, to finish: CGPoint, hold: Bool) {
       guard
         let window = NSApplication.shared.windows.first(where: {
           $0.styleMask.contains(.resizable) && !$0.isSheet
@@ -207,6 +234,7 @@ enum PreviewSupport {
         CGRect(origin: .zero, size: window.frame.size).contains(finish)
       else { return }
       window.makeKeyAndOrderFront(nil)
+      NSApplication.shared.activate(ignoringOtherApps: true)
       func enqueue(_ type: NSEvent.EventType, at point: CGPoint, delay: Double) {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
           guard
@@ -226,7 +254,7 @@ enum PreviewSupport {
           at: CGPoint(x: start.x + (finish.x - start.x) * t, y: start.y + (finish.y - start.y) * t),
           delay: 0.25 + Double(step) * 0.025)
       }
-      enqueue(.leftMouseUp, at: finish, delay: 1.35)
+      if !hold { enqueue(.leftMouseUp, at: finish, delay: 1.35) }
     }
   #endif
 }

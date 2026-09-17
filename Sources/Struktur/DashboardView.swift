@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct DashboardView: View {
   @EnvironmentObject private var store: WorkspaceStore
@@ -8,7 +7,6 @@ struct DashboardView: View {
   @State private var customizing = false
   @State private var showingLibrary = false
   @State private var expanded: WidgetConfiguration?
-  @State private var availableWidth: CGFloat = 1100
 
   var body: some View {
     ScrollView {
@@ -16,22 +14,8 @@ struct DashboardView: View {
         hero
         WeekRibbon(selectedDate: $selectedDate)
         workspaceToolbar
-        WidgetGrid {
-          ForEach(store.widgets) { widget in
-            WidgetShell(
-              configuration: widget, selectedDate: $selectedDate, customizing: customizing,
-              gridColumns: WidgetGridGeometry.columnCount(width: availableWidth),
-              reorder: { point in reorder(widget.id, at: point) },
-              expand: { expanded = widget }
-            )
-            .layoutValue(key: WidgetColumnsKey.self, value: widget.columns)
-            .layoutValue(key: WidgetRowsKey.self, value: widget.rows)
-          }
-        }
-        .onGeometryChange(for: CGFloat.self) {
-          $0.size.width
-        } action: {
-          availableWidth = $0
+        InteractiveWidgetGrid(selectedDate: $selectedDate, customizing: customizing) {
+          expanded = $0
         }
         if store.widgets.isEmpty {
           VStack(spacing: 16) {
@@ -64,18 +48,6 @@ struct DashboardView: View {
     }
   }
 
-  private func reorder(_ id: UUID, at localPoint: CGPoint) {
-    let frames = WidgetGridGeometry.frames(
-      width: availableWidth, sizes: store.widgets.map { ($0.columns, $0.rows) })
-    guard let source = store.widgets.firstIndex(where: { $0.id == id }) else { return }
-    let point = CGPoint(
-      x: frames[source].minX + 17 + localPoint.x,
-      y: frames[source].minY + 14.5 + localPoint.y)
-    if let target = frames.firstIndex(where: { $0.contains(point) }), target != source {
-      withAnimation(.snappy) { store.reorderWidget(id, to: target) }
-    }
-  }
-
   private var hero: some View {
     HStack(alignment: .center) {
       VStack(alignment: .leading, spacing: 12) {
@@ -103,32 +75,49 @@ struct DashboardView: View {
   private var workspaceToolbar: some View {
     HStack(spacing: 10) {
       HStack(spacing: 6) {
-        Image(systemName: "square.grid.2x2").font(.system(size: 11))
-        Text("Your workspace").font(.system(size: 11, weight: .semibold))
+        Image(systemName: customizing ? "pencil.and.outline" : "square.grid.2x2")
+          .font(.system(size: 11))
+        Text(customizing ? "Editing layout" : "Your workspace")
+          .font(.system(size: 11, weight: .semibold))
       }
-      Text("\(store.widgets.count) widgets").font(.system(size: 9)).foregroundStyle(
-        StrukturTheme.muted)
+      .foregroundStyle(StrukturTheme.ink)
+      .frame(width: 124, height: 28)
+      .background(
+        customizing ? StrukturTheme.editingSurface : .clear,
+        in: RoundedRectangle(cornerRadius: 7))
+      Text(
+        customizing ? "Drag headers to move · corners to resize" : "\(store.widgets.count) widgets"
+      )
+      .font(.system(size: 10)).foregroundStyle(StrukturTheme.muted).lineLimit(1)
       Spacer()
-      if customizing {
-        Text("Drag to move or resize widgets.").font(.system(size: 10)).foregroundStyle(
-          StrukturTheme.muted)
-        Button("Done") { withAnimation(.snappy) { customizing = false } }
-          .buttonStyle(StrukturButtonStyle(primary: true, compact: true))
-      } else {
-        Button {
-          withAnimation(.snappy) { customizing = true }
-        } label: {
-          Label("Edit layout", systemImage: "slider.horizontal.3")
+      Group {
+        if customizing {
+          Button {
+            withAnimation(.easeInOut(duration: 0.18)) { customizing = false }
+          } label: {
+            Label("Done", systemImage: "checkmark").frame(width: 84, height: 14)
+          }
+          .keyboardShortcut(.defaultAction)
+          .help("Finish editing the layout")
+        } else {
+          Button {
+            withAnimation(.easeInOut(duration: 0.18)) { customizing = true }
+          } label: {
+            Label("Edit layout", systemImage: "slider.horizontal.3").frame(width: 84, height: 14)
+          }
+          .help("Move and resize widgets")
         }
-        .buttonStyle(StrukturButtonStyle(compact: true))
       }
+      .buttonStyle(StrukturButtonStyle(primary: customizing, compact: true))
       Button {
         showingLibrary = true
       } label: {
-        Label("Add widget", systemImage: "plus")
+        Label("Add widget", systemImage: "plus").frame(width: 84, height: 14)
       }
       .buttonStyle(StrukturButtonStyle(primary: !customizing, compact: true))
-    }.padding(.top, 21).padding(.bottom, 15)
+    }
+    .frame(height: 28)
+    .padding(.top, 21).padding(.bottom, 15)
   }
 }
 
@@ -183,9 +172,6 @@ struct WeekRibbon: View {
   }
 }
 
-struct WidgetColumnsKey: LayoutValueKey { static let defaultValue = 1 }
-struct WidgetRowsKey: LayoutValueKey { static let defaultValue = 1 }
-
 enum WidgetGridGeometry {
   static let gap: CGFloat = 16
   static let rowHeight: CGFloat = 196
@@ -200,55 +186,60 @@ enum WidgetGridGeometry {
       max(1, min(3, rows + Int((translation.height / (rowHeight + gap)).rounded())))
     )
   }
-  static func frames(width: CGFloat, sizes: [(columns: Int, rows: Int)]) -> [CGRect] {
+  static func liveResizeFrame(start: CGRect, width: CGFloat, translation: CGSize) -> CGRect {
     let columns = columnCount(width: width)
     let cellWidth = max(1, (width - CGFloat(columns - 1) * gap) / CGFloat(columns))
-    var occupied: Set<Int> = []
-    return sizes.map { size in
+    return CGRect(
+      origin: start.origin,
+      size: CGSize(
+        width: max(cellWidth, min(width - start.minX, start.width + translation.width)),
+        height: max(rowHeight, min(3 * rowHeight + 2 * gap, start.height + translation.height))))
+  }
+
+  static func dropIndex(at point: CGPoint, frames: [CGRect]) -> Int? {
+    // Include the gutters, so a drop between cards has a predictable destination.
+    if let hit = frames.firstIndex(where: { $0.insetBy(dx: -gap / 2, dy: -gap / 2).contains(point) }
+    ) {
+      return hit
+    }
+    return frames.indices.min {
+      distance(point, to: frames[$0]) < distance(point, to: frames[$1])
+    }
+  }
+
+  private static func distance(_ point: CGPoint, to rect: CGRect) -> CGFloat {
+    let dx = max(rect.minX - point.x, 0, point.x - rect.maxX)
+    let dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
+    return dx * dx + dy * dy
+  }
+
+  static func frames(
+    width: CGFloat, sizes: [(columns: Int, rows: Int)],
+    liveResize: (index: Int, frame: CGRect)? = nil
+  ) -> [CGRect] {
+    let columns = columnCount(width: width)
+    let cellWidth = max(1, (width - CGFloat(columns - 1) * gap) / CGFloat(columns))
+    var occupied: [CGRect] = liveResize.map { [$0.frame] } ?? []
+    return sizes.enumerated().map { index, size in
+      if let liveResize, index == liveResize.index { return liveResize.frame }
       let span = max(1, min(columns, size.columns))
       let rows = max(1, min(3, size.rows))
       var row = 0
-      var col = 0
-      search: while true {
+      while true {
         for candidate in 0...(columns - span) {
-          let cells = (row..<(row + rows)).flatMap { r in
-            (candidate..<(candidate + span)).map { r * columns + $0 }
-          }
-          if cells.allSatisfy({ !occupied.contains($0) }) {
-            occupied.formUnion(cells)
-            col = candidate
-            break search
+          let rect = CGRect(
+            x: CGFloat(candidate) * (cellWidth + gap), y: CGFloat(row) * (rowHeight + gap),
+            width: CGFloat(span) * cellWidth + CGFloat(span - 1) * gap,
+            height: CGFloat(rows) * rowHeight + CGFloat(rows - 1) * gap)
+          if occupied.allSatisfy({ !rect.intersects($0.insetBy(dx: -gap + 0.01, dy: -gap + 0.01)) })
+          {
+            occupied.append(rect)
+            return rect
           }
         }
         row += 1
       }
-      return CGRect(
-        x: CGFloat(col) * (cellWidth + gap), y: CGFloat(row) * (rowHeight + gap),
-        width: CGFloat(span) * cellWidth + CGFloat(span - 1) * gap,
-        height: CGFloat(rows) * rowHeight + CGFloat(rows - 1) * gap)
     }
-  }
-}
-
-struct WidgetGrid: Layout {
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let width = proposal.width ?? 1100
-    return CGSize(width: width, height: frames(width, subviews).map(\.maxY).max() ?? 0)
-  }
-  func placeSubviews(
-    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-  ) {
-    let positions = frames(bounds.width, subviews)
-    for (index, subview) in subviews.enumerated() {
-      let rect = positions[index]
-      subview.place(
-        at: CGPoint(x: bounds.minX + rect.minX, y: bounds.minY + rect.minY), anchor: .topLeading,
-        proposal: ProposedViewSize(rect.size))
-    }
-  }
-  private func frames(_ width: CGFloat, _ subviews: Subviews) -> [CGRect] {
-    WidgetGridGeometry.frames(
-      width: width, sizes: subviews.map { ($0[WidgetColumnsKey.self], $0[WidgetRowsKey.self]) })
   }
 }
 
@@ -257,28 +248,33 @@ struct WidgetShell: View {
   let configuration: WidgetConfiguration
   @Binding var selectedDate: Date
   var customizing: Bool
-  var gridColumns: Int
-  var reorder: (CGPoint) -> Void
+  var interacting = false
+  var moveBegan: (CGPoint) -> Void
+  var moveChanged: (CGSize) -> Void
+  var moveEnded: () -> Void
+  var resizeBegan: () -> Void
+  var resizeChanged: (CGSize) -> Void
+  var resizeEnded: () -> Void
+  var cancelInteraction: () -> Void
   var expand: () -> Void
-  @State private var dropTarget = false
-  @State private var resizeTranslation = CGSize.zero
 
   var body: some View {
     GeometryReader { geometry in
       VStack(spacing: 0) {
         header
-        WidgetContent(configuration: configuration, selectedDate: $selectedDate)
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        GeometryReader { content in
+          WidgetContent(configuration: configuration, selectedDate: $selectedDate)
+            .frame(width: content.size.width, height: content.size.height, alignment: .topLeading)
+            .clipped()
+        }
+        .allowsHitTesting(!customizing)
+        .opacity(customizing ? 0.65 : 1)
       }
+      .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
       .background(background, in: RoundedRectangle(cornerRadius: 16))
       .overlay {
         RoundedRectangle(cornerRadius: 16)
-          .strokeBorder(
-            dropTarget
-              ? AccentToken.lilac.color
-              : (customizing ? StrukturTheme.ink.opacity(0.3) : StrukturTheme.hairline),
-            style: StrokeStyle(lineWidth: dropTarget ? 2 : 1, dash: customizing ? [5, 4] : [])
-          )
+          .strokeBorder(StrukturTheme.hairline, lineWidth: 1)
           .allowsHitTesting(false)
       }
       .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -287,23 +283,17 @@ struct WidgetShell: View {
           Image(systemName: "arrow.up.left.and.arrow.down.right")
             .font(.system(size: 10, weight: .bold)).foregroundStyle(StrukturTheme.ink)
             .frame(width: 27, height: 27).background(
-              StrukturTheme.surface, in: RoundedRectangle(cornerRadius: 7)
+              StrukturTheme.editingSurface, in: RoundedRectangle(cornerRadius: 7)
             )
             .padding(5)
             .overlay {
               NativeDragSurface(
-                changed: { resizeTranslation = $0 },
-                ended: { translation, _ in
-                  guard abs(translation.width) > 3 || abs(translation.height) > 3 else { return }
-                  let size = WidgetGridGeometry.resized(
-                    columns: configuration.columns, rows: configuration.rows,
-                    displayedColumns: gridColumns, width: geometry.size.width,
-                    translation: translation)
-                  withAnimation(.snappy) {
-                    store.resizeWidget(configuration.id, columns: size.columns, rows: size.rows)
-                    resizeTranslation = .zero
-                  }
-                }, cursor: .crosshair)
+                began: { _ in resizeBegan() }, changed: resizeChanged,
+                ended: { delta, _ in
+                  resizeChanged(delta)
+                  resizeEnded()
+                },
+                cancelled: cancelInteraction, cursor: .crosshair)
             }
             .help("Drag to resize. More sizes are available in the widget menu.")
             .accessibilityLabel("Resize \(configuration.kind.title)")
@@ -323,17 +313,6 @@ struct WidgetShell: View {
             }
         }
       }
-      .dropDestination(for: String.self) { items, _ in
-        guard customizing, let value = items.first, value.hasPrefix("struktur-widget:"),
-          let id = UUID(uuidString: String(value.dropFirst(16)))
-        else { return false }
-        if let position = store.widgets.firstIndex(where: { $0.id == configuration.id }) {
-          withAnimation(.snappy) { store.reorderWidget(id, to: position) }
-        }
-        return true
-      } isTargeted: {
-        dropTarget = customizing && $0
-      }
     }
   }
 
@@ -351,15 +330,22 @@ struct WidgetShell: View {
     HStack(spacing: 6) {
       HStack(spacing: 7) {
         Image(systemName: customizing ? "line.3.horizontal" : configuration.kind.icon)
-          .font(.system(size: 10)).foregroundStyle(StrukturTheme.muted)
-        Text(configuration.kind.title).font(.system(size: 11, weight: .medium)).lineLimit(1)
+          .font(.system(size: 10, weight: customizing ? .semibold : .regular))
+          .foregroundStyle(customizing ? StrukturTheme.ink : StrukturTheme.muted)
+        Text(configuration.kind.title)
+          .font(.system(size: 11, weight: customizing ? .semibold : .medium))
+          .fixedSize(horizontal: false, vertical: true)
+          .foregroundStyle(StrukturTheme.ink)
         Spacer(minLength: 0)
-      }.contentShape(Rectangle())
+      }.frame(maxHeight: .infinity).contentShape(Rectangle())
         .overlay {
           if customizing {
-            NativeDragSurface(ended: { translation, point in
-              if abs(translation.width) > 3 || abs(translation.height) > 3 { reorder(point) }
-            })
+            NativeDragSurface(
+              began: moveBegan, changed: moveChanged,
+              ended: { delta, _ in
+                moveChanged(delta)
+                moveEnded()
+              }, cancelled: cancelInteraction)
           }
         }
         .accessibilityElement(children: .ignore)
@@ -389,10 +375,12 @@ struct WidgetShell: View {
         Button("Move earlier") { move(-1) }
         Button("Move later") { move(1) }
         Divider()
-        Button("Remove widget", role: .destructive) {
+        Button(role: .destructive) {
           withAnimation(.snappy) {
             store.setWidgets(store.widgets.filter { $0.id != configuration.id })
           }
+        } label: {
+          Label("Remove widget", systemImage: "trash").foregroundStyle(StrukturTheme.destructive)
         }
       } label: {
         Image(systemName: "ellipsis").font(.system(size: 11)).frame(width: 18, height: 25)
@@ -400,6 +388,7 @@ struct WidgetShell: View {
       .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
       .help("Widget options").accessibilityLabel("Options for \(configuration.kind.title)")
     }.padding(.leading, 17).padding(.trailing, 12).frame(height: 43)
+      .background(customizing ? StrukturTheme.editingSurface : .clear)
   }
   private func resize(_ columns: Int, _ rows: Int) {
     withAnimation(.snappy) { store.resizeWidget(configuration.id, columns: columns, rows: rows) }

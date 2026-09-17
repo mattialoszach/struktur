@@ -41,18 +41,22 @@ struct MonthCalendar: View {
       GeometryReader { proxy in
         let columnCount = store.preferences.showWeekends ? 7 : 5
         let rowCount = max(1, Int(ceil(Double(monthDays.count) / Double(columnCount))))
-        LazyVGrid(
-          columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: columnCount),
-          spacing: 0
-        ) {
-          ForEach(Array(monthDays.enumerated()), id: \.offset) { _, day in
-            MonthDayCell(
-              day: day, selectedDate: $selectedDate, editingEntry: $editingEntry,
-              projectID: projectID
-            )
-            .frame(height: proxy.size.height / CGFloat(rowCount))
+        ScrollView {
+          LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: columnCount),
+            spacing: 0
+          ) {
+            ForEach(Array(monthDays.enumerated()), id: \.offset) { _, day in
+              MonthDayCell(
+                day: day, selectedDate: $selectedDate, editingEntry: $editingEntry,
+                projectID: projectID
+              )
+              .frame(
+                height: MonthCalendarGeometry.rowHeight(
+                  availableHeight: proxy.size.height, rows: rowCount))
+            }
           }
-        }
+        }.scrollIndicators(.hidden)
       }
     }
     .padding(.horizontal, 20)
@@ -71,6 +75,13 @@ struct MonthCalendar: View {
     var calendar = Calendar.autoupdatingCurrent
     calendar.firstWeekday = store.preferences.weekStartsMonday ? 2 : 1
     return calendar
+  }
+}
+
+enum MonthCalendarGeometry {
+  // Room for a date, its overflow action, and cell padding even in a short widget.
+  static func rowHeight(availableHeight: CGFloat, rows: Int) -> CGFloat {
+    max(64, availableHeight / CGFloat(max(1, rows)))
   }
 }
 

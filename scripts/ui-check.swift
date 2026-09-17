@@ -1,7 +1,8 @@
 // Read or exercise the accessibility tree of an explicitly selected preview process.
 // Usage: swift scripts/ui-check.swift <pid> <operation> [label] [value]
 // Operations: list, press, set, frames, scroll, drag, resize, adjust, capture,
-// replay-drag, replay-resize, replay-click, replay-double-click, replay-key (return/escape/tab), replay-text.
+// replay-drag, replay-resize, replay-hold-drag, replay-hold-resize (Escape cancels), capture-now,
+// replay-click, replay-double-click, replay-key (return/escape/tab/left/right/up/down), replay-text.
 import AppKit
 import ApplicationServices
 
@@ -29,8 +30,13 @@ if operation == "replay-text" {
   exit(0)
 }
 if operation == "replay-key" {
-  guard let code = ["return": 36, "tab": 48, "escape": 53][label] else {
-    fail("Supply return, tab, or escape.")
+  guard
+    let code = [
+      "return": 36, "tab": 48, "escape": 53, "left": 123, "right": 124,
+      "down": 125, "up": 126,
+    ][label]
+  else {
+    fail("Supply return, tab, escape, left, right, up, or down.")
   }
   DistributedNotificationCenter.default().postNotificationName(
     Notification.Name("app.struktur.preview.replay"), object: String(pid),
@@ -39,10 +45,13 @@ if operation == "replay-key" {
   print("Replayed \(label)")
   exit(0)
 }
-if operation == "capture" {
+if operation == "capture" || operation == "capture-now" {
+  if operation == "capture-now" { RunLoop.current.run(until: Date().addingTimeInterval(0.4)) }
   DistributedNotificationCenter.default().postNotificationName(
-    Notification.Name("app.struktur.preview.capture"), object: String(pid), userInfo: nil,
+    Notification.Name("app.struktur.preview.capture"), object: String(pid),
+    userInfo: ["immediate": operation == "capture-now"],
     deliverImmediately: true)
+  if operation == "capture-now" { RunLoop.current.run(until: Date().addingTimeInterval(0.3)) }
   print("Requested preview snapshot for \(pid)")
   exit(0)
 }
@@ -171,7 +180,9 @@ if operation == "replay-click" || operation == "replay-double-click" {
   print("Replayed \(operation) on \(label)")
   exit(0)
 }
-if ["drag", "resize", "replay-drag", "replay-resize"].contains(operation) {
+if ["drag", "resize", "replay-drag", "replay-resize", "replay-hold-drag", "replay-hold-resize"]
+  .contains(operation)
+{
   guard let frame = rect(named(label)) else { fail("Element has no screen rectangle.") }
   let start = CGPoint(x: frame.midX, y: frame.midY)
   let finish: CGPoint
@@ -198,6 +209,7 @@ if ["drag", "resize", "replay-drag", "replay-resize"].contains(operation) {
       userInfo: [
         "x": start.x - window.minX, "y": window.maxY - start.y,
         "endX": finish.x - window.minX, "endY": window.maxY - finish.y,
+        "hold": operation.contains("hold"),
       ], deliverImmediately: true)
     RunLoop.current.run(until: Date().addingTimeInterval(2))
   } else {
