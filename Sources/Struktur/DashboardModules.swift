@@ -48,15 +48,15 @@ struct DayFlowWidget: View {
               Text(selectedDate.formatted(.dateTime.month(.wide)))
             }
           }.font(.strukturSerif(21)).tracking(-0.4)
-          HStack(spacing: 5) {
-            Circle().fill(AccentToken.mint.color).frame(width: 5, height: 5)
-            Text(
-              "\(durationText(store.scheduledSeconds(on: selectedDate, projectID: projectID))) planned"
-            )
-            Text("·")
-            Text(
-              "\(durationText(max(0, store.workingWindow(on: selectedDate).duration - store.scheduledSeconds(on: selectedDate)))) open"
-            )
+          ViewThatFits(in: .horizontal) {
+            HStack(spacing: 5) {
+              plannedTime
+              Text("·")
+              Text(
+                "\(durationText(max(0, store.workingWindow(on: selectedDate).duration - store.scheduledSeconds(on: selectedDate)))) open"
+              )
+            }.fixedSize()
+            plannedTime.fixedSize()
           }.font(.system(size: 9)).foregroundStyle(StrukturTheme.muted)
         }
         Spacer(minLength: 5)
@@ -88,6 +88,14 @@ struct DayFlowWidget: View {
     .sheet(item: $task) { TaskEditorSheet(task: $0) }
     .sheet(isPresented: $newEvent) {
       EventEditorSheet(suggestedDate: selectedDate, projectID: projectID)
+    }
+  }
+
+  private var plannedTime: some View {
+    HStack(spacing: 5) {
+      Circle().fill(AccentToken.mint.color).frame(width: 5, height: 5)
+      Text(
+        "\(durationText(store.scheduledSeconds(on: selectedDate, projectID: projectID))) planned")
     }
   }
 
@@ -150,13 +158,14 @@ struct DayFlowWidget: View {
       } label: {
         HStack(alignment: .center, spacing: 10) {
           VStack(alignment: .leading, spacing: 6) {
-            Text(block.title).font(.system(size: 12, weight: .medium)).lineLimit(2)
+            Text(block.title).font(.system(size: 12, weight: .medium))
+              .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 5) {
               SuitIcon(symbol: symbol, color: block.color, size: 9)
               Text(
                 store.project(block.projectID)?.name ?? (block.task == nil ? "Personal" : "Task"))
               if let location = block.entry?.location, !location.isEmpty {
-                Text("· \(location)").lineLimit(1)
+                Text("· \(location)").fixedSize(horizontal: false, vertical: true)
               }
             }.font(.system(size: 9)).foregroundStyle(StrukturTheme.muted)
           }
@@ -208,7 +217,7 @@ struct DayFlowWidget: View {
             "Last block ends at \($0.formatted(.dateTime.hour().minute()))."
           } ?? "No timed blocks scheduled.")
       )
-      .font(.system(size: 9)).lineLimit(2)
+      .font(.system(size: 9)).fixedSize(horizontal: false, vertical: true)
       Spacer(minLength: 0)
       SuitIcon(symbol: .club, color: .mint, size: 14)
     }.padding(.horizontal, 15).padding(.vertical, 11)
@@ -267,12 +276,13 @@ struct NextMovesWidget: View {
                   editingTask = item
                 } label: {
                   VStack(alignment: .leading, spacing: 7) {
-                    Text(item.title).font(.system(size: 11, weight: .medium)).lineLimit(2)
+                    Text(item.title).font(.system(size: 11, weight: .medium))
+                      .fixedSize(horizontal: false, vertical: true)
                       .strikethrough(item.isCompleted)
                     HStack(spacing: 4) {
                       if let project = store.project(item.projectID) {
                         SuitIcon(symbol: project.symbol, color: project.color, size: 9)
-                        Text(project.name).lineLimit(1)
+                        Text(project.name).fixedSize(horizontal: false, vertical: true)
                       } else {
                         Text("Personal")
                       }
@@ -307,7 +317,7 @@ struct NextMovesWidget: View {
       }.scrollIndicators(.hidden)
       HStack(spacing: 7) {
         Image(systemName: "plus").font(.system(size: 11)).foregroundStyle(StrukturTheme.muted)
-          TextField("Add a task…", text: $capture).textFieldStyle(.plain).font(.system(size: 10))
+        TextField("Add a task…", text: $capture).textFieldStyle(.plain).font(.system(size: 10))
           .onSubmit(addTask)
         if !capture.isEmpty {
           Button(action: addTask) {
@@ -357,11 +367,9 @@ struct FocusWidget: View {
             Text("An open focus session").tag(UUID?.none)
             ForEach(store.tasks.filter { !$0.isCompleted }) { Text($0.title).tag(Optional($0.id)) }
           }.disabled(session != nil)
-          Picker("Session length", selection: $minutes) {
-            Text("25 minutes").tag(25)
-            Text("50 minutes").tag(50)
-            Text("90 minutes").tag(90)
-          }.pickerStyle(.segmented).labelsHidden().disabled(session != nil)
+          StrukturOptions(label: "Session length", selection: $minutes, options: [25, 50, 90]) {
+            "\($0) minutes"
+          }.disabled(session != nil)
         }
         HStack(spacing: 7) {
           if let session {
@@ -456,7 +464,7 @@ struct DeadlineWidget: View {
                   color: store.project(task.projectID)?.color ?? .peach, size: 16)
                 VStack(alignment: .leading, spacing: 4) {
                   Text(task.title).font(.system(size: expanded ? 13 : 10, weight: .medium))
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
                   if let due = task.dueDate {
                     Text(deadlineText(due)).font(.system(size: 9)).foregroundStyle(
                       StrukturTheme.muted)
@@ -539,7 +547,8 @@ struct ConnectionsWidget: View {
               let count = store.tasks.filter { $0.projectID == project.id && !$0.isCompleted }.count
               let seconds = store.scheduledSeconds(on: selectedDate, projectID: project.id)
               VStack(alignment: .leading, spacing: 3) {
-                Text("\(count) \(count == 1 ? "task" : "tasks")").font(.system(size: 10, weight: .medium))
+                Text("\(count) \(count == 1 ? "task" : "tasks")").font(
+                  .system(size: 10, weight: .medium))
                 Text("\(durationText(seconds)) on calendar").font(.system(size: 8)).foregroundStyle(
                   StrukturTheme.muted)
               }.frame(width: width * 0.25, alignment: .leading).position(x: width * 0.855, y: y)
@@ -684,7 +693,7 @@ struct ProjectPulseWidget: View {
           Spacer(minLength: 0)
         }
         Text(project.goal.isEmpty ? project.detail : project.goal).font(.system(size: 10))
-          .foregroundStyle(StrukturTheme.muted).lineLimit(2)
+          .foregroundStyle(StrukturTheme.muted).fixedSize(horizontal: false, vertical: true)
         VStack(spacing: 7) {
           GeometryReader { geometry in
             Capsule().fill(StrukturTheme.ink.opacity(0.08))

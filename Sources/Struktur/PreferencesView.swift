@@ -81,9 +81,11 @@ struct GeneralPreferences: View {
         PreferenceGroup(
           title: "Appearance", detail: "Follow macOS or keep Struktur in your preferred theme."
         ) {
-          Picker("Appearance", selection: appearance) {
-            ForEach(AppAppearance.allCases) { Text($0.title).tag($0) }
-          }.pickerStyle(.segmented)
+          StrukturOptions(
+            label: "Appearance", selection: appearance, options: AppAppearance.allCases
+          ) {
+            $0.title
+          }
         }
         PreferenceGroup(
           title: "A quieter interface",
@@ -105,7 +107,8 @@ struct GeneralPreferences: View {
                 workspace.isDemo = false
                 store.replaceWorkspace(workspace)
               }
-              Button("Start empty") { confirmEmpty = true }
+              Button("Start empty", role: .destructive) { confirmEmpty = true }
+                .buttonStyle(StrukturButtonStyle())
             }
           }
         }
@@ -150,9 +153,11 @@ struct CalendarPreferences: View {
           detail:
             "Choose your calendar's opening view. The dashboard timeline remembers its own view."
         ) {
-          Picker("Default", selection: mode) {
-            ForEach(CalendarViewMode.allCases) { Text($0.title).tag($0) }
-          }.pickerStyle(.segmented)
+          StrukturOptions(
+            label: "Default calendar view", selection: mode, options: CalendarViewMode.allCases
+          ) {
+            $0.title
+          }
         }
         PreferenceGroup(
           title: "Working window", detail: "Keep the timetable focused on the hours you use."
@@ -303,6 +308,7 @@ struct DataPreferences: View {
         ) {
           Text("No account, analytics, or network connection is required.").font(.callout)
           Button("Restore demo workspace", role: .destructive) { showingResetConfirmation = true }
+            .buttonStyle(StrukturButtonStyle())
           Button("Reveal data folder") {
             NSWorkspace.shared.open(WorkspaceStore.defaultFileURL.deletingLastPathComponent())
           }

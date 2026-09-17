@@ -44,16 +44,15 @@ struct TasksPage: View {
             .secondary)
         }
         Spacer()
-        Picker("Filter", selection: $filter) {
-          ForEach(TaskFilter.allCases) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.segmented).labelsHidden().frame(width: 300)
+        StrukturOptions(label: "Filter", selection: $filter, options: TaskFilter.allCases) {
+          $0.title
+        }.frame(width: 300)
         Button {
           showingNewTask = true
         } label: {
           Label("Add task", systemImage: "plus")
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(StrukturButtonStyle(primary: true))
       }
       .padding(24)
 
@@ -81,7 +80,12 @@ struct TasksPage: View {
                     .onTapGesture { editingTask = task }
                     .contextMenu {
                       Button("Edit") { editingTask = task }
-                      Button("Delete", role: .destructive) { store.removeTask(id: task.id) }
+                      Button(role: .destructive) {
+                        store.removeTask(id: task.id)
+                      } label: {
+                        Label("Delete", systemImage: "trash").foregroundStyle(
+                          StrukturTheme.destructive)
+                      }
                     }
                 }
               }
@@ -268,7 +272,8 @@ struct TaskEditorSheet: View {
   var body: some View {
     VStack(spacing: 0) {
       SheetHeader(
-        title: isNew ? "New task" : "Edit task", subtitle: "Set a deadline, schedule time, or add notes.")
+        title: isNew ? "New task" : "Edit task",
+        subtitle: "Set a deadline, schedule time, or add notes.")
       Divider()
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
@@ -295,11 +300,11 @@ struct TaskEditorSheet: View {
           HStack(spacing: 16) {
             Toggle("Deadline", isOn: $hasDueDate)
             if hasDueDate {
-              DatePicker(
-                "",
-                selection: Binding(get: { draft.dueDate ?? Date() }, set: { draft.dueDate = $0 })
+              StrukturDateField(
+                "Deadline",
+                selection: Binding(get: { draft.dueDate ?? Date() }, set: { draft.dueDate = $0 }),
+                showsLabel: false
               )
-              .labelsHidden()
             }
             Spacer()
             Stepper(
@@ -308,12 +313,12 @@ struct TaskEditorSheet: View {
           HStack(spacing: 16) {
             Toggle("Place on calendar", isOn: $hasPlannedStart)
             if hasPlannedStart {
-              DatePicker(
-                "",
+              StrukturDateField(
+                "Scheduled start",
                 selection: Binding(
-                  get: { draft.plannedStart ?? Date() }, set: { draft.plannedStart = $0 })
+                  get: { draft.plannedStart ?? Date() }, set: { draft.plannedStart = $0 }),
+                showsLabel: false
               )
-              .labelsHidden()
             }
             Spacer()
           }
@@ -369,6 +374,7 @@ struct TaskEditorSheet: View {
             store.removeTask(id: draft.id)
             dismiss()
           }
+          .buttonStyle(StrukturButtonStyle())
           .padding(.leading, 18)
         }
         SheetActions(canSave: !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -393,10 +399,9 @@ struct MarkdownComposer: View {
       HStack {
         Label("Notes", systemImage: "text.alignleft").font(.caption.weight(.semibold))
         Spacer()
-        Picker("Mode", selection: $showingPreview) {
-          Text("Write").tag(false)
-          Text("Preview").tag(true)
-        }.pickerStyle(.segmented).labelsHidden().frame(width: 140)
+        StrukturOptions(label: "Mode", selection: $showingPreview, options: [false, true]) {
+          $0 ? "Preview" : "Write"
+        }.frame(width: 150)
       }
       Group {
         if showingPreview {
@@ -444,9 +449,12 @@ struct SheetActions: View {
   var body: some View {
     HStack {
       Spacer()
-      Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-      Button("Save", action: save).buttonStyle(.borderedProminent).disabled(!canSave)
-        .keyboardShortcut(.defaultAction)
+      Button("Cancel") { dismiss() }.buttonStyle(StrukturButtonStyle()).keyboardShortcut(
+        .cancelAction)
+      Button("Save", action: save).buttonStyle(StrukturButtonStyle(primary: true)).disabled(
+        !canSave
+      )
+      .keyboardShortcut(.defaultAction)
     }
     .padding(16)
   }

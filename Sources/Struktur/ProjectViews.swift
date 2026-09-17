@@ -12,13 +12,15 @@ struct ProjectsPage: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(alignment: .bottom) {
+      HStack(alignment: .center) {
         VStack(alignment: .leading, spacing: 8) {
           Eyebrow(wording: .spacesEyebrow)
           EditableWording(.spacesTitle).font(.strukturSerif(35)).tracking(-1)
         }
         Spacer()
-        Toggle("Archived", isOn: $showArchived).toggleStyle(.checkbox).font(.caption)
+        StrukturOptions(label: "Spaces view", selection: $showArchived, options: [false, true]) {
+          $0 ? "Archived" : "Active"
+        }.frame(width: 172)
         Button {
           showingNewProject = true
         } label: {
@@ -35,7 +37,8 @@ struct ProjectsPage: View {
                 SuitIcon(symbol: project.symbol, color: project.color, size: 28)
                 VStack(alignment: .leading, spacing: 5) {
                   Text(project.name).font(.strukturSerif(18))
-                  let count = store.tasks.filter { $0.projectID == project.id && !$0.isCompleted }.count
+                  let count = store.tasks.filter { $0.projectID == project.id && !$0.isCompleted }
+                    .count
                   Text(
                     "\(count) open \(count == 1 ? "task" : "tasks")"
                   ).font(.system(size: 10)).foregroundStyle(StrukturTheme.muted)
@@ -236,12 +239,12 @@ struct ProjectEditorSheet: View {
             Toggle("Give it a target date", isOn: $hasTarget)
             Spacer()
             if hasTarget {
-              DatePicker(
+              StrukturDateField(
                 "Target",
                 selection: Binding(
                   get: { draft.targetDate ?? Date().adding(days: 30) },
-                  set: { draft.targetDate = $0 }), displayedComponents: .date
-              ).labelsHidden()
+                  set: { draft.targetDate = $0 }), displayedComponents: .date, showsLabel: false
+              )
             }
           }
           HStack(spacing: 14) {

@@ -20,9 +20,9 @@ struct GoalsPage: View {
           Button("New goal", systemImage: "plus") { newGoal = true }
             .buttonStyle(StrukturButtonStyle(primary: true))
         }
-        HStack {
-          DatePicker("View progress for", selection: $date, displayedComponents: .date)
-          Button("Today") { date = Date() }.buttonStyle(StrukturButtonStyle(compact: true))
+        HStack(alignment: .bottom) {
+          StrukturDateField("View progress for", selection: $date, displayedComponents: .date)
+          Button("Today") { date = Date() }.buttonStyle(StrukturButtonStyle())
           Spacer()
         }
         if store.goals.isEmpty {
@@ -66,7 +66,7 @@ struct GoalProgressCard: View {
             StrukturTheme.ink)
         }
       }
-      Text(goal.title).font(.strukturSerif(23)).lineLimit(2)
+      Text(goal.title).font(.strukturSerif(23)).fixedSize(horizontal: false, vertical: true)
       GeometryReader { geometry in
         ZStack(alignment: .leading) {
           Capsule().fill(StrukturTheme.hairline)
@@ -219,7 +219,7 @@ struct GoalEditorSheet: View {
             ) { task in
               Toggle(isOn: membership(task.id, in: \.taskIDs)) {
                 VStack(alignment: .leading, spacing: 2) {
-                  Text(task.title).lineLimit(1)
+                  Text(task.title).fixedSize(horizontal: false, vertical: true)
                   Text(
                     String(task.id.uuidString.prefix(8)) + " · "
                       + (store.project(task.projectID)?.name ?? "Personal")
@@ -255,9 +255,13 @@ struct GoalEditorSheet: View {
       }
       Divider()
       HStack {
-        if !isNew { Button("Delete goal", role: .destructive) { confirmingDelete = true } }
+        if !isNew {
+          Button("Delete goal", role: .destructive) { confirmingDelete = true }
+            .buttonStyle(StrukturButtonStyle())
+        }
         Spacer()
-        Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+        Button("Cancel") { dismiss() }.buttonStyle(StrukturButtonStyle()).keyboardShortcut(
+          .cancelAction)
         Button("Save goal") {
           store.saveGoal(draft)
           onSave(draft)

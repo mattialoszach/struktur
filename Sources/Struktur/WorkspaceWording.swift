@@ -93,8 +93,7 @@ struct EditableWording: View {
 
   var body: some View {
     text
-      .lineLimit(2)
-      .truncationMode(.tail)
+      .fixedSize(horizontal: false, vertical: true)
       .contentShape(Rectangle())
       .onTapGesture(count: 2) { editing = true }
       .accessibilityIdentifier("wording.\(key.rawValue)")

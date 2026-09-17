@@ -57,12 +57,12 @@ struct EventEditorSheet: View {
             }
           }
           Toggle("All-day", isOn: $draft.isAllDay)
-          HStack {
-            DatePicker(
+          HStack(alignment: .bottom, spacing: 18) {
+            StrukturDateField(
               "Starts", selection: $draft.start,
               displayedComponents: draft.isAllDay ? .date : [.date, .hourAndMinute])
-            DatePicker(
-              "Ends", selection: $draft.end, in: draft.start...,
+            StrukturDateField(
+              "Ends", selection: $draft.end, minimumDate: draft.start,
               displayedComponents: draft.isAllDay ? .date : [.date, .hourAndMinute])
           }
           if original?.seriesID == nil || scope == .series {
@@ -107,15 +107,16 @@ struct EventEditorSheet: View {
         if !isNew {
           Button("Delete", role: .destructive) {
             confirmingDelete = true
-          }
+          }.buttonStyle(StrukturButtonStyle())
         }
         Spacer()
-        Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+        Button("Cancel") { dismiss() }.buttonStyle(StrukturButtonStyle()).keyboardShortcut(
+          .cancelAction)
         Button("Save") {
           isNew ? store.add(draft.savedCopy) : store.update(draft.savedCopy)
           dismiss()
         }
-        .buttonStyle(.borderedProminent).disabled(
+        .buttonStyle(StrukturButtonStyle(primary: true)).disabled(
           draft.title.trimmingCharacters(in: .whitespaces).isEmpty
             || (draft.isAllDay ? draft.end < draft.start : draft.end <= draft.start)
             || (draft.recurrence?.until.map { $0 < draft.start.startOfDay } ?? false)
@@ -227,10 +228,10 @@ struct RecurrenceControls: View {
           Text("After occurrences").tag("count")
         }
         if current.until != nil {
-          DatePicker(
+          StrukturDateField(
             "Last day",
             selection: Binding(get: { rule?.until ?? start }, set: { rule?.until = $0 }),
-            in: start.startOfDay..., displayedComponents: .date)
+            minimumDate: start.startOfDay, displayedComponents: .date)
         }
         if let count = current.count {
           Stepper(
@@ -243,5 +244,10 @@ struct RecurrenceControls: View {
         .font(.caption).foregroundStyle(StrukturTheme.muted)
       }
     }.padding(14).background(StrukturTheme.mint, in: RoundedRectangle(cornerRadius: 12))
+      .onChange(of: start) { _, value in
+        if let until = rule?.until {
+          rule?.until = DateFieldValue.clamped(until, minimumDate: value.startOfDay)
+        }
+      }
   }
 }

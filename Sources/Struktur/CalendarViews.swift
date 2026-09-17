@@ -59,9 +59,10 @@ struct CalendarToolbar: View {
         IconButton(icon: "chevron.left", label: "Previous period") { move(-1) }
         IconButton(icon: "chevron.right", label: "Next period") { move(1) }
       }
-      Picker("Calendar view", selection: $mode) {
-        ForEach(CalendarViewMode.allCases) { Text($0.title).tag($0) }
-      }.pickerStyle(.segmented).labelsHidden().frame(width: 248)
+      StrukturOptions(label: "Calendar view", selection: $mode, options: CalendarViewMode.allCases)
+      {
+        $0.title
+      }.frame(width: 248)
       Button(action: addEvent) { Image(systemName: "plus") }.buttonStyle(
         StrukturButtonStyle(primary: true, compact: true)
       ).help("New calendar block")

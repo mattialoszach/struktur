@@ -113,7 +113,9 @@ struct InsightsPage: View {
             Text("Completed tasks").font(.strukturSerif(20, weight: .semibold))
             Chart(weeklyData) { item in
               LineMark(x: .value("Day", item.day, unit: .day), y: .value("Tasks", item.completed))
-                .foregroundStyle(AccentToken.mint.color).interpolationMethod(.catmullRom)
+                // Piecewise monotone cubic interpolation stays between adjacent counts,
+                // including flat zero runs, without the overshoot of Catmull–Rom.
+                .foregroundStyle(AccentToken.mint.color).interpolationMethod(.monotone)
               PointMark(x: .value("Day", item.day, unit: .day), y: .value("Tasks", item.completed))
                 .foregroundStyle(AccentToken.mint.color)
             }
@@ -122,7 +124,7 @@ struct InsightsPage: View {
           }.strukturCard().frame(maxWidth: .infinity)
         }
         EditableWording(.insightsFooter)
-        .font(.strukturSerif(18)).foregroundStyle(.secondary).padding(.vertical, 12)
+          .font(.strukturSerif(18)).foregroundStyle(.secondary).padding(.vertical, 12)
       }.padding(28)
     }
   }

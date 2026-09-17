@@ -98,10 +98,11 @@ struct AppleIntegrationPreferences: View {
           }
           Toggle("Calendar blocks", isOn: $includeEvents)
           if includeEvents {
-            HStack {
-              DatePicker("From", selection: $exportStart, displayedComponents: .date)
-              DatePicker(
-                "Through", selection: $exportEnd, in: exportStart..., displayedComponents: .date)
+            HStack(alignment: .bottom, spacing: 18) {
+              StrukturDateField("From", selection: $exportStart, displayedComponents: .date)
+              StrukturDateField(
+                "Through", selection: $exportEnd, minimumDate: exportStart,
+                displayedComponents: .date)
             }
             Text(
               "Calendar export is limited to one year per exchange. Open tasks have no date-range limit."
@@ -190,6 +191,8 @@ struct AppleIntegrationPreferences: View {
         )
         .font(.caption).foregroundStyle(.secondary)
       }.padding(24)
+    }.onChange(of: exportStart) { _, value in
+      exportEnd = DateFieldValue.clamped(exportEnd, minimumDate: value)
     }
   }
 }

@@ -244,13 +244,15 @@ struct SidebarView: View {
             } label: {
               HStack(spacing: 10) {
                 SuitIcon(symbol: project.symbol, color: project.color, size: 14).frame(width: 18)
-                Text(project.name).font(.system(size: 11)).lineLimit(1)
+                Text(project.name).font(.system(size: 11))
+                  .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Text(
                   "\(store.tasks.filter { $0.projectID == project.id && !$0.isCompleted }.count)"
                 )
                 .font(.system(size: 9)).foregroundStyle(StrukturTheme.muted)
-              }.padding(.horizontal, 23).frame(height: 32).contentShape(Rectangle())
+              }.padding(.horizontal, 23).padding(.vertical, 7).frame(minHeight: 32)
+                .contentShape(Rectangle())
             }.buttonStyle(.plain)
           }
           if store.projects.isEmpty {
@@ -491,8 +493,10 @@ struct SearchPanel: View {
     HStack(spacing: 12) {
       Image(systemName: icon).frame(width: 28).foregroundStyle(StrukturTheme.muted)
       VStack(alignment: .leading, spacing: 4) {
-        Text(title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-        Text(detail).font(.caption2).foregroundStyle(StrukturTheme.muted).lineLimit(1)
+        Text(title).font(.system(size: 13, weight: .medium))
+          .fixedSize(horizontal: false, vertical: true)
+        Text(detail).font(.caption2).foregroundStyle(StrukturTheme.muted)
+          .fixedSize(horizontal: false, vertical: true)
       }
       Spacer()
       Image(systemName: "arrow.up.left").font(.caption2).foregroundStyle(StrukturTheme.muted)
