@@ -28,7 +28,7 @@ The packaging script generates the icon, embeds the privacy manifest, and verifi
 ## Your workspace
 
 - Eleven widget types: day timeline, tasks, focus, deadlines, connections, momentum, daily progress, upcoming events, project goals, Markdown notes, and custom goal tracking.
-- **Edit layout** enables dragging by a widget's header and resizing by its bottom-right corner. The widget menu also offers exact sizes, move earlier/later, removal, and space filters for supported modules.
+- **Edit layout** switches to **Done** without changing button size or shifting the toolbar or widgets. An editing badge, warm neutral backgrounds on draggable headers and resize handles, and subdued content make the mode visible without colored outlines. Drag a header to lift and move its widget with the pointer; neighboring widgets make room and a placeholder marks the destination. Drag the bottom-right corner to resize live, then release to snap to the grid. Escape cancels the current drag. Only the final order or size is saved. The widget menu also offers exact sizes, move earlier/later, removal, and space filters for supported modules.
 - Add multiple instances of a widget and pin each to a different space. Layout, size, order, appearance, and calendar preferences save automatically.
 - Every widget can open in a larger view. Calendar, tasks, spaces, goals, focus, and insights also have dedicated pages.
 - Double-click the dashboard title, page taglines, or descriptive headings inside widgets to change their wording. The text keeps its existing styling, with no edit icon or hover decoration. Return saves; Escape or clicking outside cancels. Choose **Use default**, then Save, or save a blank field to restore the original wording. Edits persist with your workspace, including export/import, and the same widget heading is shared across instances and expanded views. Right-click → **Edit wording…** and the accessibility **Edit wording** action also open the editor.
@@ -39,9 +39,11 @@ The packaging script generates the icon, embeds the privacy manifest, and verifi
 
 The flow timeline shows actual start and end times, live countdowns, open gaps, and the final block of the day. Scheduled tasks occupy their estimated duration. A deadline is displayed as a due marker, not an invented calendar appointment.
 
-The calendar supports day, week, month, and agenda views; custom working hours; Sunday/Monday weeks; and optional weekends. Overlapping blocks get separate lanes, and multi-day/all-day events retain their date boundaries. Double-click an open timeline slot to create a block. Drag a task from the task list onto the calendar to schedule it. Month cells offer an add-block context menu.
+The calendar supports day, week, month, and agenda views; custom working hours; Sunday/Monday weeks; and optional weekends. Calendar modes, task filters, appearance, focus duration, and Markdown modes share flat option controls with keyboard navigation. Choices reserve room for their full labels and wrap into rows when constrained. Overlapping blocks get separate lanes, and multi-day/all-day events retain their date boundaries. Double-click an open timeline slot to create a block. Drag a task from the task list onto the calendar to schedule it. Month cells offer an add-block context menu. Calendar content stays inside its widget; short month views scroll instead of compressing date rows.
 
-Spaces carry a pastel color and a heart, diamond, spade, or club symbol across the app. Link tasks to specific calendar blocks, track a space's goal, inspect the relationship map, and copy stable `struktur://task/UUID`, `struktur://event/UUID`, or `struktur://space/UUID` references. Global search accepts titles, notes, and identifiers.
+Date fields use a shared rounded surface with locale-aware native text editing and a calendar popover styled like the sidebar. Choosing a day preserves the time; minimum dates are respected. The calendar follows your Sunday/Monday preference and provides month navigation and a Today shortcut.
+
+Spaces carry a pastel color and a heart, diamond, spade, or club symbol across the app. A shared Active/Archived selector switches between current and archived spaces. Link tasks to specific calendar blocks, track a space's goal, inspect the relationship map, and copy stable `struktur://task/UUID`, `struktur://event/UUID`, or `struktur://space/UUID` references. Global search accepts titles, notes, and identifiers. Custom headings and titles in scrolling lists wrap instead of being shortened with ellipses.
 
 Calendar blocks can repeat daily, weekly on selected weekdays, or monthly, with an interval, end date, occurrence count, or no end. Rules retain their time zone and wall-clock time across daylight-saving changes. Edit/delete a single occurrence or the entire series; individually edited exceptions are retained when changing a series. Stable occurrence IDs resolve without storing every future block.
 
@@ -54,6 +56,8 @@ Tasks support deadlines, scheduled starts, estimated durations, priorities, dail
 Markdown renders beside the editor as you type. Headings, inline formatting, links, lists, quotes, and interactive checkboxes are supported. The scratchpad saves automatically, including when the app quits.
 
 The focus timer is shared across the dashboard and focus room. Pause, resume, and end sessions; associate a task; and inspect recorded focus time. Active and paused sessions survive relaunch. Finishing a timer records the session; marking its task complete is a separate action.
+
+Completed-task charts use a smooth piecewise monotone curve that stays between consecutive values, including flat zero runs. Destructive editor actions use red text and a subtle red background; save and completion actions use the shared primary button style.
 
 ## Data and Apple apps
 
@@ -81,7 +85,7 @@ This connection adds new items and preserves existing ones. It is **not automati
 swift test
 ~~~
 
-57 tests cover workspace migration, widget persistence and packing, recurring tasks and calendar series, linked goals, focus pause/resume/relaunch, schedule overlap and free-time calculation, all-day boundaries, references, scoped exports, import validation/backups, Apple exchange with a fake client, Markdown checkboxes, and custom wording persistence, resets, and legacy compatibility.
+74 tests cover workspace migration, widget persistence and packing, continuous resize spacing and bounds, stable pointer tracking and cancellation, compact month rows, full-label option sizing and wrapping, date-field bindings and minimum dates, calendar grids and daylight-saving transitions, recurring tasks and calendar series, linked goals, focus pause/resume/relaunch, schedule overlap and free-time calculation, all-day boundaries, references, scoped exports, import validation/backups, Apple exchange with a fake client, Markdown checkboxes, and custom wording persistence, resets, and legacy compatibility.
 
 Debug builds support isolated previews that never touch your personal workspace:
 
@@ -94,6 +98,8 @@ STRUKTUR_PREVIEW=1 STRUKTUR_THEME=dark STRUKTUR_WIDTH=1040 STRUKTUR_HEIGHT=740 \
 `STRUKTUR_SECTION=calendar` (or `tasks`, `projects`, `goals`, `focus`, `insights`, `settings`) opens a specific page. `scripts/ui-check.swift` can inspect or exercise an explicitly selected preview PID through macOS Accessibility for native smoke checks.
 
 `STRUKTUR_PREVIEW_FIXTURE=completion` adds recurrence/goal examples. Reuse a printed temporary workspace with `STRUKTUR_PREVIEW_ID=<its identifier>` for relaunch checks. The UI helper supports scrolling and debug-only native mouse-event replay (`replay-drag` / `replay-resize`).
+
+`replay-hold-drag` / `replay-hold-resize` pause before release to inspect live movement and verify that previews have not changed saved data. Use `capture-now` for the current window without resetting its size, and `replay-key escape` to cancel. Option controls can be exercised with `replay-key left` / `right` after focusing a choice.
 
 For wording checks, use `replay-click` or `replay-double-click` with an accessibility identifier such as `wording.dashboardTitle`. `replay-text` replaces the wording editor's text through the native field editor; `replay-key return` / `escape` exercises save/cancel. These helpers only operate in explicitly launched debug previews.
 
