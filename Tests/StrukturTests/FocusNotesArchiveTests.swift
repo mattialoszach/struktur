@@ -111,4 +111,63 @@ final class FocusNotesArchiveTests: XCTestCase {
       XCTAssertNil(WorkspaceReference(url: URL(string: value)!))
     }
   }
+
+  func testDeletingArchivedSpacePreservesContentsRelationshipsGoalsAndPreferences() throws {
+    try withStore { store, url in
+      var archived = Project(name: "Finished course", color: .lilac)
+      archived.isArchived = true
+      let other = Project(name: "Current course", color: .mint)
+      store.add(archived)
+      store.add(other)
+      let now = Date(timeIntervalSince1970: 1_800_000_000)
+      let series = CalendarEntry(title: "Lecture", start: now, end: now.addingTimeInterval(3600),
+        projectID: archived.id, recurrence: CalendarRecurrence())
+      store.add(series)
+      let task = TaskItem(title: "Read", notes: "Keep notes", createdAt: now, cadence: .weekly,
+        projectID: archived.id, linkedEventID: series.id)
+      let unrelated = TaskItem(title: "Keep this too", createdAt: now, projectID: other.id)
+      store.add(task)
+      store.add(unrelated)
+      store.saveGoal(TrackedGoal(title: "Reading", projectIDs: [archived.id, other.id]))
+      let widget = WidgetConfiguration(kind: .tasks, columns: 2, rows: 2, projectID: archived.id)
+      store.setWidgets([widget])
+      store.updatePreferences { $0.appearance = .dark }
+      store.updateScratchpad("Shared notes")
+      store.startFocus(minutes: 25, taskID: task.id, now: now)
+      XCTAssertTrue(store.removeArchivedProject(id: archived.id))
+      XCTAssertFalse(store.removeArchivedProject(id: archived.id))
+      let restored = WorkspaceStore(fileURL: url)
+      XCTAssertNil(restored.project(archived.id))
+      XCTAssertEqual(restored.workspace.projects, [other])
+      var detachedTask = task
+      detachedTask.projectID = nil
+      XCTAssertEqual(restored.tasks, [detachedTask, unrelated])
+      var detachedSeries = series
+      detachedSeries.projectID = nil
+      XCTAssertEqual(restored.entries, [detachedSeries])
+      XCTAssertEqual(restored.workspace.focusSession?.taskID, task.id)
+      XCTAssertEqual(restored.goals.first?.projectIDs, [other.id])
+      XCTAssertEqual(restored.goals.first?.taskIDs, [task.id])
+      var detachedWidget = widget
+      detachedWidget.projectID = nil
+      XCTAssertEqual(restored.widgets, [detachedWidget])
+      XCTAssertEqual(restored.preferences.appearance, .dark)
+      XCTAssertEqual(restored.scratchpad, "Shared notes")
+      try restored.workspace.validate()
+      let taskReference = try XCTUnwrap(WorkspaceReference(url: URL(string: "struktur://task/\(task.id)")!))
+      XCTAssertTrue(restored.contains(taskReference))
+      let deletedReference = try XCTUnwrap(WorkspaceReference(url: URL(string: "struktur://space/\(archived.id)")!))
+      XCTAssertFalse(restored.contains(deletedReference))
+    }
+  }
+
+  func testActiveSpaceCannotBePermanentlyDeleted() throws {
+    try withStore { store, _ in
+      let project = Project(name: "Active", color: .mint)
+      store.add(project)
+      let before = try store.exportData()
+      XCTAssertFalse(store.removeArchivedProject(id: project.id))
+      XCTAssertEqual(try store.exportData(), before)
+    }
+  }
 }

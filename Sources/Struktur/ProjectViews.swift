@@ -66,13 +66,18 @@ struct ProjectsPage: View {
           icon: "suit.club.fill",
           title: showArchived ? "No archived spaces" : "No space selected",
           message: showArchived
-            ? "Archived spaces keep their tasks and calendar history."
+            ? "Archived spaces stay here until you restore or delete them. Deleting a space keeps its tasks and calendar blocks."
             : "Create or select a space to see its tasks and calendar blocks.")
       }
     }
-    .onAppear { if selectedProjectID == nil { selectedProjectID = store.projects.first?.id } }
-    .onChange(of: showArchived) { _, _ in selectedProjectID = visibleProjects.first?.id }
-    .onChange(of: store.projects.map(\.id)) { _, _ in
+    .onAppear {
+      showArchived = store.project(selectedProjectID)?.isArchived == true
+      if selectedProjectID == nil { selectedProjectID = visibleProjects.first?.id }
+    }
+    .onChange(of: selectedProjectID) { _, id in
+      if let project = store.project(id) { showArchived = project.isArchived }
+    }
+    .onChange(of: visibleProjects.map(\.id)) { _, _ in
       if !visibleProjects.contains(where: { $0.id == selectedProjectID }) {
         selectedProjectID = visibleProjects.first?.id
       }
@@ -90,6 +95,7 @@ struct ProjectDetail: View {
   @State private var editingEntry: CalendarEntry?
   @State private var newTask = false
   @State private var newEvent = false
+  @State private var confirmingDeletion = false
   private var tasks: [TaskItem] { store.tasks.filter { $0.projectID == project.id } }
   private var entries: [CalendarEntry] {
     store.calendarEntries(
@@ -113,6 +119,21 @@ struct ProjectDetail: View {
           }
           Spacer()
           Button("Edit space", action: onEdit).buttonStyle(StrukturButtonStyle(compact: true))
+        }
+        if project.isArchived {
+          VStack(alignment: .leading, spacing: 12) {
+            Text("Archived spaces stay until you restore or delete them. Deleting this space keeps its tasks and calendar blocks outside the space.")
+              .font(.system(size: 12)).foregroundStyle(StrukturTheme.muted)
+            HStack(spacing: 10) {
+              Button("Restore space") {
+                var restored = project
+                restored.isArchived = false
+                store.update(restored)
+              }.buttonStyle(StrukturButtonStyle())
+              Button("Delete space…", role: .destructive) { confirmingDeletion = true }
+                .buttonStyle(StrukturButtonStyle())
+            }
+          }.strukturCard()
         }
         if !project.goal.isEmpty {
           HStack(spacing: 14) {
@@ -177,6 +198,12 @@ struct ProjectDetail: View {
         }
         ItemReferenceRow(kind: "space", id: project.id)
       }.padding(30)
+    }
+    .alert("Delete “\(project.name)” permanently?", isPresented: $confirmingDeletion) {
+      Button("Cancel", role: .cancel) {}
+      Button("Delete space", role: .destructive) { store.removeArchivedProject(id: project.id) }
+    } message: {
+      Text("The space and its description and goal will be removed. Its tasks, notes, calendar blocks, and focus history are kept. Linked goals keep their tasks, and widgets filtered to this space switch to all spaces. This cannot be undone.")
     }
     .sheet(item: $editingTask) { TaskEditorSheet(task: $0) }
     .sheet(item: $editingEntry) { EventEditorSheet(entry: $0) }

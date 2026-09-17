@@ -221,6 +221,37 @@ final class WorkspaceStore: ObservableObject {
     changed()
   }
 
+  /// Deleting an archived container keeps its work and stable item references intact.
+  @discardableResult
+  func removeArchivedProject(id: UUID) -> Bool {
+    guard project(id)?.isArchived == true else { return false }
+    let taskIDs = workspace.tasks.filter { $0.projectID == id }.map(\.id)
+    workspace.projects.removeAll { $0.id == id }
+    for index in workspace.tasks.indices where workspace.tasks[index].projectID == id {
+      workspace.tasks[index].projectID = nil
+    }
+    for index in workspace.calendarEntries.indices where workspace.calendarEntries[index].projectID == id {
+      workspace.calendarEntries[index].projectID = nil
+    }
+    if var goals = workspace.goals {
+      for index in goals.indices where goals[index].projectIDs.contains(id) {
+        goals[index].projectIDs.removeAll { $0 == id }
+        for taskID in taskIDs where !goals[index].taskIDs.contains(taskID) {
+          goals[index].taskIDs.append(taskID)
+        }
+      }
+      workspace.goals = goals
+    }
+    if var widgets = workspace.preferences.widgetLayout {
+      for index in widgets.indices where widgets[index].projectID == id {
+        widgets[index].projectID = nil
+      }
+      workspace.preferences.widgetLayout = widgets
+    }
+    changed()
+    return true
+  }
+
   func updateScratchpad(_ value: String) {
     workspace.scratchpad = value
     changed(debounce: true)
