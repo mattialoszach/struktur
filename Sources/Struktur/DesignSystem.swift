@@ -116,6 +116,7 @@ struct StrukturOptions<Value: Hashable>: View {
             .contentShape(RoundedRectangle(cornerRadius: 7))
         }.buttonStyle(.plain)
           .focusable()
+          .focusEffectDisabled()
           .focused($focusedOption, equals: option)
           .accessibilityLabel(title(option))
           .accessibilityAddTraits(selection == option ? .isSelected : [])

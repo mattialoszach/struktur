@@ -133,7 +133,7 @@ struct DateSelectionCalendar: View {
                 }
               }
               .opacity(unavailable ? 0.3 : 1).contentShape(RoundedRectangle(cornerRadius: 8))
-            }.buttonStyle(.plain).disabled(unavailable).focusable().focused(
+            }.buttonStyle(.plain).disabled(unavailable).focusable().focusEffectDisabled().focused(
               $focusedDay, equals: day
             )
             .accessibilityLabel(day.formatted(.dateTime.weekday(.wide).day().month(.wide).year()))
