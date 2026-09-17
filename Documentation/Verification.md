@@ -4,7 +4,8 @@ Updated 17 September 2026. This records local evidence, not App Store approval o
 
 ## Automated checks
 
-- 74 tests pass with zero failures.
+- 90 tests pass with zero failures.
+- Focus/notes/archive follow-up: early finish excludes paused time, preserves the linked task and notes, survives relaunch, and records only once. Pause/finish at expiry records a completed timer. Debounced note edits and checklist changes persist; unreadable saved data stays protected. Checklist toggling leaves inline examples, indentation, and links intact. Reference parsing rejects placeholders/malformed URLs. Deleting an archived space preserves tasks, notes, recurrence, event links, focus sessions, goal membership, widget identity/size, and unrelated preferences; active spaces cannot be deleted through that operation.
 - Shared controls: intrinsic option widths, compact wrapping without overlap, and empty/unbounded layouts. Date fields: native action-to-binding updates, minimum day/time clamping, preservation of entered times, leap years, week-start preferences, and calendar grids/day selection across daylight-saving changes.
 - Wording: personal overrides survive relaunch and export/import, reset independently, and preserve existing preferences and workspace content. Legacy workspaces use the new defaults. Whitespace, oversized imported text, Unicode characters, and unknown future wording keys are covered.
 - Recurrence: selected weekdays, interval/count/until boundaries, DST, month-end behavior, all-day durations, distant-future queries, stable UID lookup, exceptions, series edits, and deletion/reference cleanup. The next-block lookup has no one-year cutoff; canceled occurrences stay canceled after editing a series.
@@ -16,9 +17,16 @@ Updated 17 September 2026. This records local evidence, not App Store approval o
 - The 16 September packaged app launched with a native window and no workspace-recovery warning. The 17 September package was rebuilt and signature-verified; its updated UI was exercised in isolated debug previews. A separate launch of the new release package was not repeated against the personal workspace.
 - Distribution and live-QA scripts refuse to proceed without their explicit prerequisites. No notarization upload or store submission was performed.
 
+- Focus session library: draft and active titles, captured note copies, early/timed finishes, clear-without-changing-history, relaunch, title/notes-only edits, deletion without recreating stale records, updated goal totals, all-history search beyond ten sessions, scoped exports/imports, and legacy records without invented note copies are covered. Titles captured from linked tasks survive task renaming/deletion. Compact `- []` and empty checklist markers render and toggle.
+
 ## Native checks
 
 All interactive checks use temporary preview workspaces, not the personal workspace.
+
+- Session-library follow-up: aligned timer/notes cards and full-width Write/Preview notes inspected at 1040 × 740 and 1867 × 1139. The large statistics cards and timer guidance were removed. Native title entry, start/pause/finish, clear cancellation/confirmation, reopening captured notes, renaming, saved-checkbox editing, delete cancellation, and deletion from both a history row and the saved-session editor were exercised with persisted JSON assertions. Working notes stayed separate from saved edits/deletions. Searching by note contents found and opened the expected saved session. Earlier records remain available; note snapshots cannot be recovered for sessions saved before this feature.
+
+- Initial Focus/notes/archive follow-up: light and dark Focus pages inspected at 1040 × 740. The session-library pass above supersedes that page layout. Mouse selection and right-arrow navigation persisted the focus duration without a blue focus outline. Clicking a note checkbox persisted the checked Markdown and survived preview relaunch. Start → Pause → Finish early recorded only 2.33 seconds and cleared the timer; the page shows recent history and a saved-session message. Native clicks on valid note references opened task editors within the same window, including a second editor sheet reached from a task's notes; Cancel returned to the prior draft. Placeholder references displayed an in-app alert. The helper now routes click replay to the frontmost attached sheet and lists link controls.
+- Archived-space native checks: archive, cancel deletion, restore, archive again, and confirm deletion. The sample space was removed while all ten tasks (including completed tasks) remained, with its tasks detached from the deleted space. Restore/delete controls and the empty archive were inspected in dark mode. The archive follow-up passed its test suite and universal packaging/signature check. Physical input and external launch routing from other apps remain outside this pass.
 
 - Task creation/save/search/completion; scheduled tasks and all-day calendar blocks.
 - Weekly recurring-event creation and persistence; opening an occurrence, switching to entire-series editing, and saving a new title while retaining its rule. Goal creation with a selected task reference.
