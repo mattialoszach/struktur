@@ -1,6 +1,6 @@
 # Struktur
 
-Your day, by design. An Apple-native workspace for time, tasks, spaces, and a little breathing room.
+A native macOS workspace for schedules, tasks, projects, and notes.
 
 Built in Swift 6 and SwiftUI for macOS 15+. No web view, account, analytics, or third-party dependencies.
 
@@ -31,6 +31,7 @@ The packaging script generates the icon, embeds the privacy manifest, and verifi
 - **Edit layout** enables dragging by a widget's header and resizing by its bottom-right corner. The widget menu also offers exact sizes, move earlier/later, removal, and space filters for supported modules.
 - Add multiple instances of a widget and pin each to a different space. Layout, size, order, appearance, and calendar preferences save automatically.
 - Every widget can open in a larger view. Calendar, tasks, spaces, goals, focus, and insights also have dedicated pages.
+- Double-click the dashboard title, page taglines, or descriptive headings inside widgets to change their wording. The text keeps its existing styling, with no edit icon or hover decoration. Return saves; Escape or clicking outside cancels. Choose **Use default**, then Save, or save a blank field to restore the original wording. Edits persist with your workspace, including export/import, and the same widget heading is shared across instances and expanded views. Right-click → **Edit wording…** and the accessibility **Edit wording** action also open the editor.
 - The starter workspace is labeled as sample content. Keep the examples or start empty in Settings → General.
 - The original default dashboard upgrades to the new starter layout. Custom legacy widget selections and calendar/appearance settings are retained.
 
@@ -80,7 +81,7 @@ This connection adds new items and preserves existing ones. It is **not automati
 swift test
 ~~~
 
-53 tests cover workspace migration, widget persistence and packing, recurring tasks and calendar series, linked goals, focus pause/resume/relaunch, schedule overlap and free-time calculation, all-day boundaries, references, scoped exports, import validation/backups, Apple exchange with a fake client, and Markdown checkboxes.
+57 tests cover workspace migration, widget persistence and packing, recurring tasks and calendar series, linked goals, focus pause/resume/relaunch, schedule overlap and free-time calculation, all-day boundaries, references, scoped exports, import validation/backups, Apple exchange with a fake client, Markdown checkboxes, and custom wording persistence, resets, and legacy compatibility.
 
 Debug builds support isolated previews that never touch your personal workspace:
 
@@ -93,5 +94,7 @@ STRUKTUR_PREVIEW=1 STRUKTUR_THEME=dark STRUKTUR_WIDTH=1040 STRUKTUR_HEIGHT=740 \
 `STRUKTUR_SECTION=calendar` (or `tasks`, `projects`, `goals`, `focus`, `insights`, `settings`) opens a specific page. `scripts/ui-check.swift` can inspect or exercise an explicitly selected preview PID through macOS Accessibility for native smoke checks.
 
 `STRUKTUR_PREVIEW_FIXTURE=completion` adds recurrence/goal examples. Reuse a printed temporary workspace with `STRUKTUR_PREVIEW_ID=<its identifier>` for relaunch checks. The UI helper supports scrolling and debug-only native mouse-event replay (`replay-drag` / `replay-resize`).
+
+For wording checks, use `replay-click` or `replay-double-click` with an accessibility identifier such as `wording.dashboardTitle`. `replay-text` replaces the wording editor's text through the native field editor; `replay-key return` / `escape` exercises save/cancel. These helpers only operate in explicitly launched debug previews.
 
 Live Apple testing requires explicit consent: `scripts/apple-qa.sh --allow-disposable-apple-data` builds a separate QA app, requests permissions, creates disposable test containers, verifies round trips, and removes only its own containers. Do not run it without approval. See [verification details and release gates](Documentation/Verification.md).

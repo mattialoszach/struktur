@@ -49,7 +49,7 @@ struct CalendarToolbar: View {
   var body: some View {
     HStack(spacing: 12) {
       VStack(alignment: .leading, spacing: 7) {
-        Eyebrow(text: "Make room for what matters")
+        Eyebrow(wording: .calendarEyebrow)
         Text(periodTitle).font(.strukturSerif(31)).tracking(-0.7)
       }
       Spacer()
@@ -73,7 +73,7 @@ struct CalendarToolbar: View {
     case .week:
       "Week of " + store.weekStart(for: selectedDate).formatted(.dateTime.day().month(.wide))
     case .month: selectedDate.formatted(.dateTime.month(.wide).year())
-    case .agenda: "Your next chapter."
+    case .agenda: "Upcoming schedule"
     }
   }
   private func move(_ direction: Int) {

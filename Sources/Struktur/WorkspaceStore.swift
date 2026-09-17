@@ -376,14 +376,14 @@ final class WorkspaceStore: ObservableObject {
 
   static func sampleWorkspace(now: Date = Date()) -> Workspace {
     let uni = Project(
-      name: "University", detail: "Ideas worth staying curious about.", color: .lilac,
-      goal: "Finish the semester with momentum", suit: .spade)
+      name: "University", detail: "Classes, coursework, and exams.", color: .lilac,
+      goal: "Finish the semester", suit: .spade)
     let struktur = Project(
-      name: "Struktur launch", detail: "Build something people love to use.", color: .peach,
+      name: "Struktur launch", detail: "Design, development, and release planning.", color: .peach,
       goal: "Ship the first beta", targetDate: now.adding(days: 45), suit: .diamond)
     let health = Project(
-      name: "A little balance", detail: "Good work starts with a little room to breathe.",
-      color: .mint, goal: "Make time for a little movement", suit: .club)
+      name: "Personal", detail: "Health, errands, and time off.",
+      color: .mint, goal: "Exercise regularly", suit: .club)
     let studioID = UUID()
     let seminarID = UUID()
     return Workspace(
@@ -458,7 +458,7 @@ final class WorkspaceStore: ObservableObject {
           completedAt: now.adding(days: -3).setting(hour: 15), projectID: uni.id, color: .lilac),
       ],
       scratchpad:
-        "# A little room to think\n\nOne thing I want to make progress on:\n\n- [ ] Make it simple\n- [ ] Make it feel good\n\nGood ideas deserve a place to land.",
+        "# Notes\n\nThis week:\n\n- [ ] Review lecture notes\n- [ ] Plan the next project meeting\n",
       isDemo: true
     )
   }

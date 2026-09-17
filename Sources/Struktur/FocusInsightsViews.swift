@@ -7,9 +7,9 @@ struct FocusPage: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 0) {
         VStack(alignment: .leading, spacing: 8) {
-          Eyebrow(text: "Protect a little time")
-          Text("Less noise. More possibility.").font(.strukturSerif(35)).tracking(-1)
-          Text("One task, one block of attention, and a place for wandering thoughts.")
+          Eyebrow(wording: .focusEyebrow)
+          EditableWording(.focusTitle).font(.strukturSerif(35)).tracking(-1)
+          EditableWording(.focusSubtitle)
             .font(.system(size: 12)).foregroundStyle(StrukturTheme.muted)
         }.padding(30)
         Divider()
@@ -23,14 +23,14 @@ struct FocusPage: View {
             HStack(spacing: 14) {
               ProjectMetric(
                 title: "Focused today", value: durationText(records.reduce(0) { $0 + $1.seconds }),
-                detail: "time you made space for", color: .lilac)
+                detail: "recorded focus time", color: .lilac)
               ProjectMetric(
                 title: "Sessions", value: "\(records.count)", detail: "saved to your workspace",
                 color: .mint)
             }
             if let record = records.last, record.completed {
               Label(
-                "Session complete. A little progress is still progress.",
+                "Session complete.",
                 systemImage: "checkmark.circle"
               )
               .font(.caption).foregroundStyle(StrukturTheme.muted)
@@ -82,8 +82,8 @@ struct InsightsPage: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 20) {
         VStack(alignment: .leading, spacing: 4) {
-          Text("Your rhythm").font(.strukturSerif(30, weight: .semibold))
-          Text("Signals for reflection—not scores for self-judgment.").font(.caption)
+          EditableWording(.insightsTitle).font(.strukturSerif(30, weight: .semibold))
+          EditableWording(.insightsSubtitle).font(.caption)
             .foregroundStyle(.secondary)
         }
         HStack(spacing: 14) {
@@ -98,7 +98,7 @@ struct InsightsPage: View {
         }
         HStack(alignment: .top, spacing: 14) {
           VStack(alignment: .leading, spacing: 14) {
-            Text("Weekly shape").font(.strukturSerif(20, weight: .semibold))
+            Text("Scheduled hours").font(.strukturSerif(20, weight: .semibold))
             Chart(weeklyData) { item in
               BarMark(
                 x: .value("Day", item.day, unit: .day), y: .value("Hours", item.scheduledHours)
@@ -110,7 +110,7 @@ struct InsightsPage: View {
             .frame(height: 250)
           }.strukturCard().frame(maxWidth: .infinity)
           VStack(alignment: .leading, spacing: 14) {
-            Text("Tasks closed").font(.strukturSerif(20, weight: .semibold))
+            Text("Completed tasks").font(.strukturSerif(20, weight: .semibold))
             Chart(weeklyData) { item in
               LineMark(x: .value("Day", item.day, unit: .day), y: .value("Tasks", item.completed))
                 .foregroundStyle(AccentToken.mint.color).interpolationMethod(.catmullRom)
@@ -121,9 +121,7 @@ struct InsightsPage: View {
             .frame(height: 250)
           }.strukturCard().frame(maxWidth: .infinity)
         }
-        Text(
-          "A sustainable week includes margin. Struktur intentionally leaves empty time visible."
-        )
+        EditableWording(.insightsFooter)
         .font(.strukturSerif(18)).foregroundStyle(.secondary).padding(.vertical, 12)
       }.padding(28)
     }

@@ -36,21 +36,24 @@ struct DashboardView: View {
         if store.widgets.isEmpty {
           VStack(spacing: 16) {
             EmptyState(
-              icon: "square.grid.2x2", title: "A little space to make your own.",
-              message: "Bring in the things that help you see your day clearly.")
+              icon: "square.grid.2x2", title: "No widgets yet",
+              message: "Add a widget to see your schedule, tasks, or notes here.")
             Button("Add your first widget") { showingLibrary = true }.buttonStyle(
               StrukturButtonStyle(primary: true))
           }.frame(height: 310)
         }
         HStack(spacing: 7) {
           SuitIcon(symbol: .club, color: .mint, size: 12)
-          Text("A little structure. A lot of possibility.").font(.strukturSerif(12))
+          EditableWording(.dashboardFooter).font(.strukturSerif(12))
             .foregroundStyle(StrukturTheme.muted)
           Spacer()
-          Text(
-            customizing
-              ? "Drag a header to move · drag a corner to resize" : "Made for the way you think."
-          ).font(.system(size: 9)).foregroundStyle(StrukturTheme.muted)
+          Group {
+            if customizing {
+              Text("Drag a header to move · drag a corner to resize")
+            } else {
+              EditableWording(.dashboardFooterNote)
+            }
+          }.font(.system(size: 9)).foregroundStyle(StrukturTheme.muted)
         }.padding(.top, 22).padding(.bottom, 8)
       }.padding(.horizontal, 30).padding(.bottom, 24)
     }
@@ -81,7 +84,7 @@ struct DashboardView: View {
           Circle().fill(StrukturTheme.muted).frame(width: 2, height: 2)
           Eyebrow(text: "Week \(Calendar.struktur.component(.weekOfYear, from: selectedDate))")
         }
-        (Text("Your day, ") + Text("by design.").italic())
+        EditableWording(.dashboardTitle)
           .font(.strukturSerif(43)).tracking(-1.7)
         Text(subtitle).font(.system(size: 12)).foregroundStyle(StrukturTheme.muted)
       }
@@ -93,8 +96,8 @@ struct DashboardView: View {
   private var subtitle: String {
     let count = store.tasks(on: selectedDate).count
     return count == 0
-      ? "A clear head. An open day. Make a little room for what matters."
-      : "\(count) next steps, a little breathing room, and everything in its place."
+      ? "No open tasks for this day."
+      : "\(count) open \(count == 1 ? "task" : "tasks") for this day."
   }
 
   private var workspaceToolbar: some View {
@@ -107,7 +110,7 @@ struct DashboardView: View {
         StrukturTheme.muted)
       Spacer()
       if customizing {
-        Text("Drag, resize, make it yours.").font(.system(size: 10)).foregroundStyle(
+        Text("Drag to move or resize widgets.").font(.system(size: 10)).foregroundStyle(
           StrukturTheme.muted)
         Button("Done") { withAnimation(.snappy) { customizing = false } }
           .buttonStyle(StrukturButtonStyle(primary: true, compact: true))
@@ -453,9 +456,9 @@ struct WidgetEditorSheet: View {
     VStack(spacing: 0) {
       HStack {
         VStack(alignment: .leading, spacing: 7) {
-          Eyebrow(text: "A workspace that feels like you")
-          Text("A place for your possibilities.").font(.strukturSerif(29))
-          Text("Add what you need. Resize it. Give it a space of its own.").font(.caption)
+          Eyebrow(text: "Dashboard")
+          Text("Widget library").font(.strukturSerif(29))
+          Text("Add widgets, then arrange and resize them on your dashboard.").font(.caption)
             .foregroundStyle(StrukturTheme.muted)
         }
         Spacer()

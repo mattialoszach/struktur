@@ -41,11 +41,13 @@ struct DayFlowWidget: View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(alignment: .center) {
         VStack(alignment: .leading, spacing: 5) {
-          Text(
-            mode.wrappedValue == .day
-              ? "The shape of your day" : selectedDate.formatted(.dateTime.month(.wide))
-          )
-          .font(.strukturSerif(21)).tracking(-0.4)
+          Group {
+            if mode.wrappedValue == .day {
+              EditableWording(.scheduleTitle)
+            } else {
+              Text(selectedDate.formatted(.dateTime.month(.wide)))
+            }
+          }.font(.strukturSerif(21)).tracking(-0.4)
           HStack(spacing: 5) {
             Circle().fill(AccentToken.mint.color).frame(width: 5, height: 5)
             Text(
@@ -96,8 +98,8 @@ struct DayFlowWidget: View {
         VStack(spacing: 0) {
           if blocks.isEmpty {
             EmptyState(
-              icon: "sun.max", title: "Room for possibility.",
-              message: "Add a block to give your day a little shape.")
+              icon: "sun.max", title: "Nothing scheduled",
+              message: "Add a calendar block to plan time here.")
           }
           ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
             if index > 0 {
@@ -108,7 +110,7 @@ struct DayFlowWidget: View {
                   Color.clear.frame(width: 41)
                   Image(systemName: "sparkle").font(.system(size: 10)).foregroundStyle(
                     StrukturTheme.muted)
-                  Text("\(durationText(gap)) of breathing room").font(.system(size: 9))
+                  Text("\(durationText(gap)) free").font(.system(size: 9))
                     .foregroundStyle(StrukturTheme.muted)
                   Spacer()
                 }.padding(.vertical, 9)
@@ -203,8 +205,8 @@ struct DayFlowWidget: View {
         conflicts > 0
           ? "\(conflicts) overlapping blocks · open Calendar to see lanes"
           : (end.map {
-            "Last block ends at \($0.formatted(.dateTime.hour().minute())). The rest is yours."
-          } ?? "An open day. Start with what matters.")
+            "Last block ends at \($0.formatted(.dateTime.hour().minute()))."
+          } ?? "No timed blocks scheduled.")
       )
       .font(.system(size: 9)).lineLimit(2)
       Spacer(minLength: 0)
@@ -233,7 +235,7 @@ struct NextMovesWidget: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack {
-        Text("Small steps. Big things.").font(.strukturSerif(17)).tracking(-0.4)
+        EditableWording(.tasksTitle).font(.strukturSerif(17)).tracking(-0.4)
         Spacer()
       }.padding(.horizontal, 17).padding(.bottom, 12)
       HStack(spacing: 5) {
@@ -296,8 +298,8 @@ struct NextMovesWidget: View {
           if items.isEmpty {
             VStack(alignment: .leading, spacing: 9) {
               SuitIcon(symbol: .heart, color: .peach, size: 25)
-              Text("A little lighter.").font(.strukturSerif(19))
-              Text("Nothing due in this view. Capture a next step below.").font(.caption)
+              Text("No open tasks").font(.strukturSerif(19))
+              Text("Add a task below.").font(.caption)
                 .foregroundStyle(StrukturTheme.muted)
             }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 25)
           }
@@ -305,7 +307,7 @@ struct NextMovesWidget: View {
       }.scrollIndicators(.hidden)
       HStack(spacing: 7) {
         Image(systemName: "plus").font(.system(size: 11)).foregroundStyle(StrukturTheme.muted)
-        TextField("A new next step…", text: $capture).textFieldStyle(.plain).font(.system(size: 10))
+          TextField("Add a task…", text: $capture).textFieldStyle(.plain).font(.system(size: 10))
           .onSubmit(addTask)
         if !capture.isEmpty {
           Button(action: addTask) {
@@ -341,7 +343,7 @@ struct FocusWidget: View {
       VStack(alignment: .leading, spacing: expanded ? 25 : 10) {
         HStack(alignment: .center) {
           VStack(alignment: .leading, spacing: 6) {
-            Text(session?.isPaused == true ? "Take a breath." : "One thing at a time.")
+            Text(session?.isPaused == true ? "Paused" : "Focus timer")
               .font(.system(size: expanded ? 16 : 10)).foregroundStyle(StrukturTheme.muted)
             Text(String(format: "%02d:%02d", Int(ceil(remaining)) / 60, Int(ceil(remaining)) % 60))
               .font(.strukturSerif(expanded ? 82 : 39)).tracking(-2).monospacedDigit()
@@ -438,8 +440,8 @@ struct DeadlineWidget: View {
           HStack(alignment: .firstTextBaseline, spacing: 7) {
             Text(
               due < Date()
-                ? "Needs a moment."
-                : (Calendar.struktur.isDateInToday(due) ? "Coming up today." : "A little heads-up.")
+                ? "Overdue"
+                : (Calendar.struktur.isDateInToday(due) ? "Due today" : "Next deadline")
             )
             .font(.strukturSerif(expanded ? 28 : 18)).tracking(-0.4)
             Spacer()
@@ -467,8 +469,8 @@ struct DeadlineWidget: View {
             }.buttonStyle(.plain)
           }
         } else {
-          Text("Nothing looming.").font(.strukturSerif(22))
-          Text("Your future self can breathe easy.").font(.caption).foregroundStyle(
+          Text("No upcoming deadlines").font(.strukturSerif(22))
+          Text("Open tasks with deadlines appear here.").font(.caption).foregroundStyle(
             StrukturTheme.muted)
         }
       }.padding(.horizontal, 17).padding(.bottom, 15)
@@ -489,7 +491,7 @@ struct ConnectionsWidget: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 7) {
       HStack {
-        Text("Different spaces. One bigger picture.").font(.strukturSerif(17)).tracking(-0.3)
+        EditableWording(.connectionsTitle).font(.strukturSerif(17)).tracking(-0.3)
         Spacer()
       }.padding(.horizontal, 17)
       if projects.isEmpty {
@@ -518,7 +520,7 @@ struct ConnectionsWidget: View {
             }
             VStack(alignment: .leading, spacing: 5) {
               Text("Your day").font(.strukturSerif(15))
-              Text("TIME + INTENTION").font(.system(size: 7, weight: .medium)).tracking(0.6)
+              Text("TASKS + TIME").font(.system(size: 7, weight: .medium)).tracking(0.6)
                 .foregroundStyle(StrukturTheme.muted)
             }.position(x: width * 0.12, y: height * 0.5)
             ForEach(Array(projects.enumerated()), id: \.element.id) { index, project in
@@ -537,7 +539,7 @@ struct ConnectionsWidget: View {
               let count = store.tasks.filter { $0.projectID == project.id && !$0.isCompleted }.count
               let seconds = store.scheduledSeconds(on: selectedDate, projectID: project.id)
               VStack(alignment: .leading, spacing: 3) {
-                Text("\(count) tasks").font(.system(size: 10, weight: .medium))
+                Text("\(count) \(count == 1 ? "task" : "tasks")").font(.system(size: 10, weight: .medium))
                 Text("\(durationText(seconds)) on calendar").font(.system(size: 8)).foregroundStyle(
                   StrukturTheme.muted)
               }.frame(width: width * 0.25, alignment: .leading).position(x: width * 0.855, y: y)
@@ -568,7 +570,7 @@ struct MomentumWidget: View {
     VStack(alignment: .leading, spacing: 8) {
       HStack(alignment: .firstTextBaseline, spacing: 5) {
         Text("\(store.streak)").font(.strukturSerif(30))
-        Text(store.streak == 1 ? "day in a rhythm" : "days in a rhythm").font(.system(size: 9))
+        Text(store.streak == 1 ? "day in a row" : "days in a row").font(.system(size: 9))
           .foregroundStyle(StrukturTheme.muted)
         Spacer()
         SuitIcon(symbol: .spade, color: .lilac, size: 19)
@@ -609,7 +611,7 @@ struct ProgressWidget: View {
       )
       .frame(width: 90, height: 90)
       VStack(alignment: .leading, spacing: 7) {
-        Text("A little lighter.").font(.strukturSerif(19))
+        EditableWording(.progressTitle).font(.strukturSerif(19))
         Text("\(completed) of \(total) tasks done.").font(.caption).foregroundStyle(
           StrukturTheme.muted)
       }
@@ -645,7 +647,7 @@ struct UpcomingWidget: View {
               : "Starts in \(durationText(next.start.timeIntervalSince(context.date)))",
             color: next.color)
         } else {
-          Text("Your runway is clear.").font(.strukturSerif(22))
+          Text("Nothing scheduled next").font(.strukturSerif(22))
         }
         Spacer(minLength: 0)
       }.padding(17)
@@ -692,13 +694,13 @@ struct ProjectPulseWidget: View {
               }
           }.frame(height: 5)
           HStack {
-            Text("\(completed) of \(tasks.count) steps")
+            Text("\(completed) of \(tasks.count) tasks")
             Spacer()
-            Text(project.targetDate.map { deadlineText($0) } ?? "\(Int(progress * 100))% there")
+            Text(project.targetDate.map { deadlineText($0) } ?? "\(Int(progress * 100))% complete")
           }.font(.system(size: 9)).foregroundStyle(StrukturTheme.muted)
         }
       } else {
-        Text("Give an idea a home.").font(.strukturSerif(21))
+        Text("No space selected").font(.strukturSerif(21))
         Text("Create a space to track a goal here.").font(.caption).foregroundStyle(
           StrukturTheme.muted)
       }
@@ -719,7 +721,7 @@ struct NoteWidget: View {
           showingPreview: $preview)
       } else {
         HStack {
-          Text("Keep a thought.").font(.strukturSerif(18))
+          EditableWording(.notesTitle).font(.strukturSerif(18))
           Spacer()
           Button(preview ? "Write" : "Read") { preview.toggle() }.buttonStyle(.plain).font(
             .system(size: 9))

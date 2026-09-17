@@ -60,6 +60,20 @@ enum PreviewSupport {
           object: String(ProcessInfo.processInfo.processIdentifier), queue: .main
         ) { notification in
           let info = notification.userInfo ?? [:]
+          if let text = info["text"] as? String {
+            DispatchQueue.main.async { replayText(text) }
+            return
+          }
+          if let keyCode = info["keyCode"] as? Int, [36, 48, 53].contains(keyCode) {
+            DispatchQueue.main.async { replayKey(UInt16(keyCode)) }
+            return
+          }
+          if let x = info["x"] as? Double, let y = info["y"] as? Double,
+            let clicks = info["clickCount"] as? Int, (1...2).contains(clicks)
+          {
+            DispatchQueue.main.async { replayClick(at: CGPoint(x: x, y: y), count: clicks) }
+            return
+          }
           guard let x = info["x"] as? Double, let y = info["y"] as? Double,
             let endX = info["endX"] as? Double, let endY = info["endY"] as? Double
           else { return }
@@ -120,6 +134,70 @@ enum PreviewSupport {
   }
 
   #if DEBUG
+    @MainActor private static func replayKey(_ code: UInt16) {
+      guard let window = previewTextField()?.window ?? NSApplication.shared.keyWindow else {
+        return
+      }
+      for type in [NSEvent.EventType.keyDown, .keyUp] {
+        let character = code == 36 ? "\r" : (code == 48 ? "\t" : "\u{1b}")
+        if let event = NSEvent.keyEvent(
+          with: type, location: .zero, modifierFlags: [],
+          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+          context: nil, characters: character, charactersIgnoringModifiers: character,
+          isARepeat: false, keyCode: code)
+        {
+          window.sendEvent(event)
+        }
+      }
+    }
+
+    @MainActor private static func replayText(_ text: String) {
+      guard let field = previewTextField() else { return }
+      field.selectText(nil)
+      guard let editor = field.currentEditor() as? NSTextView else { return }
+      editor.selectAll(nil)
+      editor.insertText(text, replacementRange: editor.selectedRange())
+    }
+
+    @MainActor private static func previewTextField() -> NSTextField? {
+      func find(in view: NSView) -> NSTextField? {
+        if let field = view as? NSTextField, field.isEditable,
+          field.placeholderString == "Wording"
+        {
+          return field
+        }
+        return view.subviews.lazy.compactMap { find(in: $0) }.first
+      }
+      return NSApplication.shared.windows.filter(\.isVisible).lazy.compactMap {
+        $0.contentView.flatMap { find(in: $0) }
+      }.first
+    }
+
+    @MainActor private static func replayClick(at point: CGPoint, count: Int) {
+      guard
+        let window = NSApplication.shared.windows.first(where: {
+          $0.styleMask.contains(.resizable) && !$0.isSheet
+        }), CGRect(origin: .zero, size: window.frame.size).contains(point)
+      else { return }
+      window.makeKeyAndOrderFront(nil)
+      NSApplication.shared.activate(ignoringOtherApps: true)
+      for click in 1...count {
+        for (index, type) in [NSEvent.EventType.leftMouseDown, .leftMouseUp].enumerated() {
+          DispatchQueue.main.asyncAfter(
+            deadline: .now() + Double(click) * 0.1 + Double(index) * 0.03
+          ) {
+            if let event = NSEvent.mouseEvent(
+              with: type, location: point, modifierFlags: [],
+              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+              context: nil, eventNumber: 0, clickCount: click, pressure: index == 0 ? 1 : 0)
+            {
+              NSApplication.shared.postEvent(event, atStart: false)
+            }
+          }
+        }
+      }
+    }
+
     @MainActor private static func replayDrag(from start: CGPoint, to finish: CGPoint) {
       guard
         let window = NSApplication.shared.windows.first(where: {

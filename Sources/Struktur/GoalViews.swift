@@ -11,9 +11,9 @@ struct GoalsPage: View {
       VStack(alignment: .leading, spacing: 24) {
         HStack(alignment: .bottom) {
           VStack(alignment: .leading, spacing: 8) {
-            Eyebrow(text: "Ambition, with a little structure")
-            Text("Small steps. Real change.").font(.strukturSerif(32))
-            Text("Your goals, connected to the work that moves them forward.")
+            Eyebrow(wording: .goalsEyebrow)
+            EditableWording(.goalsTitle).font(.strukturSerif(32))
+            EditableWording(.goalsSubtitle)
               .font(.callout).foregroundStyle(StrukturTheme.muted)
           }
           Spacer()
@@ -27,9 +27,9 @@ struct GoalsPage: View {
         }
         if store.goals.isEmpty {
           EmptyState(
-            icon: "scope", title: "Give your ambition a direction.",
+            icon: "scope", title: "No goals yet",
             message:
-              "Choose a daily, weekly, or ongoing target. Link tasks or whole spaces by their stable IDs."
+              "Set a daily, weekly, or ongoing target, then choose which tasks or spaces count toward it."
           )
         }
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
@@ -89,7 +89,7 @@ struct GoalProgressCard: View {
         )
         .font(.caption2).foregroundStyle(StrukturTheme.muted)
       } else {
-        Text("No reset. Every linked step counts.").font(.caption2).foregroundStyle(
+        Text("Ongoing target · does not reset").font(.caption2).foregroundStyle(
           StrukturTheme.muted)
       }
     }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
@@ -123,13 +123,13 @@ struct GoalTrackerWidget: View {
           GoalProgressCard(goal: goal, date: date)
           if expanded {
             Divider().padding(.vertical, 8)
-            Eyebrow(text: "The steps behind the goal")
+            Eyebrow(text: "Linked tasks")
             ForEach(store.tasks(for: goal)) { task in
               TaskRow(task: task).onTapGesture { editingTask = task }
             }
           }
         } else {
-          Text("Give your next step a purpose.").font(.strukturSerif(21))
+          Text("No goal selected").font(.strukturSerif(21))
           Button("Create a goal", systemImage: "plus") { newGoal = true }
             .buttonStyle(StrukturButtonStyle(compact: true))
         }
@@ -168,14 +168,14 @@ struct GoalEditorSheet: View {
   var body: some View {
     VStack(spacing: 0) {
       SheetHeader(
-        title: isNew ? "A goal worth making room for." : "Shape your goal",
-        subtitle: "Progress comes from real completions and recorded focus, not estimates.")
+        title: isNew ? "New goal" : "Edit goal",
+        subtitle: "Measure completed tasks or recorded focus time.")
       Divider()
       ScrollView {
         VStack(alignment: .leading, spacing: 18) {
           TextField("What are you working toward?", text: $draft.title)
             .font(.strukturSerif(25)).textFieldStyle(.plain)
-          TextField("A little context", text: $draft.detail, axis: .vertical)
+          TextField("Description", text: $draft.detail, axis: .vertical)
           HStack {
             Picker("Period", selection: $draft.period) {
               ForEach(GoalPeriod.allCases) { Text($0.title).tag($0) }

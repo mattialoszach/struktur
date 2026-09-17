@@ -28,7 +28,7 @@ struct EventEditorSheet: View {
     VStack(spacing: 0) {
       SheetHeader(
         title: isNew ? "New calendar block" : "Edit calendar block",
-        subtitle: "Protect the time before the day fills itself")
+        subtitle: "Set the start and end time for this block.")
       Divider()
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {

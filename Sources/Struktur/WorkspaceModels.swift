@@ -46,16 +46,16 @@ struct WidgetConfiguration: Identifiable, Codable, Equatable {
 extension DashboardWidgetKind {
   var detail: String {
     switch self {
-    case .dayFlow: "Your schedule, breathing room, and clear end times."
-    case .tasks: "Check off the next step. Keep the deadline in sight."
-    case .focus: "A shared focus timer that stays with you."
-    case .deadlines: "See what's approaching before it becomes urgent."
-    case .connections: "Follow the threads between your spaces, tasks, and time."
-    case .momentum: "An honest picture of your week, built from completed work."
-    case .todayProgress: "Today's finished work, at a glance."
-    case .upcoming: "The next calendar block, and exactly when it ends."
-    case .projectPulse: "Pin a space and watch its goal take shape."
-    case .quickNote: "A small home for big ideas, with live Markdown checklists."
+    case .dayFlow: "Scheduled blocks, end times, and free time."
+    case .tasks: "Open tasks, deadlines, and quick task entry."
+    case .focus: "A focus timer shared across the app."
+    case .deadlines: "Upcoming and overdue task deadlines."
+    case .connections: "Tasks and scheduled time grouped by space."
+    case .momentum: "Completed tasks this week and your current streak."
+    case .todayProgress: "Today's completed and remaining tasks."
+    case .upcoming: "The next calendar block with start and end times."
+    case .projectPulse: "A pinned space with its goal and task progress."
+    case .quickNote: "Notes with Markdown and interactive checklists."
     case .goals: "Daily, weekly, or ongoing goals linked to the tasks you choose."
     }
   }

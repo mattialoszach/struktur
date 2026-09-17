@@ -104,10 +104,16 @@ struct AccentDot: View {
 }
 
 struct Eyebrow: View {
-  let text: String
+  var text = ""
+  var wording: WordingKey?
   var body: some View {
-    Text(text.uppercased()).font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(
-      StrukturTheme.muted)
+    Group {
+      if let wording {
+        EditableWording(wording, uppercase: true)
+      } else {
+        Text(text.uppercased())
+      }
+    }.font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(StrukturTheme.muted)
   }
 }
 

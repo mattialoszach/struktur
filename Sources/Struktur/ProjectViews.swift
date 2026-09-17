@@ -14,8 +14,8 @@ struct ProjectsPage: View {
     VStack(spacing: 0) {
       HStack(alignment: .bottom) {
         VStack(alignment: .leading, spacing: 8) {
-          Eyebrow(text: "Your life has more than one dimension")
-          Text("Make space for it all.").font(.strukturSerif(35)).tracking(-1)
+          Eyebrow(wording: .spacesEyebrow)
+          EditableWording(.spacesTitle).font(.strukturSerif(35)).tracking(-1)
         }
         Spacer()
         Toggle("Archived", isOn: $showArchived).toggleStyle(.checkbox).font(.caption)
@@ -35,8 +35,9 @@ struct ProjectsPage: View {
                 SuitIcon(symbol: project.symbol, color: project.color, size: 28)
                 VStack(alignment: .leading, spacing: 5) {
                   Text(project.name).font(.strukturSerif(18))
+                  let count = store.tasks.filter { $0.projectID == project.id && !$0.isCompleted }.count
                   Text(
-                    "\(store.tasks.filter { $0.projectID == project.id && !$0.isCompleted }.count) next steps"
+                    "\(count) open \(count == 1 ? "task" : "tasks")"
                   ).font(.system(size: 10)).foregroundStyle(StrukturTheme.muted)
                 }
                 Spacer(minLength: 8)
@@ -60,10 +61,10 @@ struct ProjectsPage: View {
       } else {
         EmptyState(
           icon: "suit.club.fill",
-          title: showArchived ? "A little history lives here." : "Give an idea a home.",
+          title: showArchived ? "No archived spaces" : "No space selected",
           message: showArchived
             ? "Archived spaces keep their tasks and calendar history."
-            : "Create a space to connect a goal, its next steps, and the time it needs.")
+            : "Create or select a space to see its tasks and calendar blocks.")
       }
     }
     .onAppear { if selectedProjectID == nil { selectedProjectID = store.projects.first?.id } }
@@ -114,7 +115,7 @@ struct ProjectDetail: View {
           HStack(spacing: 14) {
             SuitIcon(symbol: project.symbol, color: project.color, size: 37)
             VStack(alignment: .leading, spacing: 6) {
-              Eyebrow(text: "The bigger picture")
+              Eyebrow(text: "Goal")
               Text(project.goal).font(.strukturSerif(20))
             }
             Spacer()
@@ -129,20 +130,20 @@ struct ProjectDetail: View {
         }
         HStack(spacing: 14) {
           ProjectMetric(
-            title: "Taking shape", value: "\(Int(completion * 100))%",
-            detail: "\(tasks.filter(\.isCompleted).count) of \(tasks.count) steps done",
+            title: "Completed", value: "\(Int(completion * 100))%",
+            detail: "\(tasks.filter(\.isCompleted).count) of \(tasks.count) tasks done",
             color: project.color)
           ProjectMetric(
-            title: "Next moves", value: "\(tasks.filter { !$0.isCompleted }.count)",
-            detail: "small steps toward the goal", color: .sky)
+            title: "Open tasks", value: "\(tasks.filter { !$0.isCompleted }.count)",
+            detail: "in this space", color: .sky)
           ProjectMetric(
-            title: "Time made", value: "\(entries.count)", detail: "blocks in the next 90 days",
+            title: "Scheduled", value: "\(entries.count)", detail: "blocks in the next 90 days",
             color: .mint)
         }
         HStack(alignment: .top, spacing: 16) {
           VStack(alignment: .leading, spacing: 10) {
             HStack {
-              Text("The next steps").font(.strukturSerif(20))
+              Text("Tasks").font(.strukturSerif(20))
               Spacer()
               IconButton(icon: "plus", label: "Add a task to \(project.name)") { newTask = true }
             }
@@ -165,7 +166,7 @@ struct ProjectDetail: View {
               AgendaEntryRow(entry: entry).onTapGesture { editingEntry = entry }
             }
             if entries.isEmpty {
-              Text("Make a little space on the calendar.").font(.caption).foregroundStyle(
+              Text("No calendar blocks in the next 90 days.").font(.caption).foregroundStyle(
                 StrukturTheme.muted
               ).padding(.vertical, 20)
             }
@@ -214,8 +215,8 @@ struct ProjectEditorSheet: View {
   var body: some View {
     VStack(spacing: 0) {
       SheetHeader(
-        title: isNew ? "Give an idea a home." : "Shape your space.",
-        subtitle: "A goal, its next steps, and the time it needs.")
+        title: isNew ? "New space" : "Edit space",
+        subtitle: "Keep related tasks, calendar blocks, and notes together.")
       Divider()
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
@@ -224,10 +225,10 @@ struct ProjectEditorSheet: View {
             TextField("A name for this space", text: $draft.name).font(.strukturSerif(27))
               .textFieldStyle(.plain)
           }.padding(.vertical, 8)
-          TextField("A little about it", text: $draft.detail, axis: .vertical).textFieldStyle(
+          TextField("Description", text: $draft.detail, axis: .vertical).textFieldStyle(
             .roundedBorder)
           VStack(alignment: .leading, spacing: 7) {
-            Eyebrow(text: "The bigger picture")
+            Eyebrow(text: "Goal")
             TextField("What are you working toward?", text: $draft.goal, axis: .vertical)
               .textFieldStyle(.roundedBorder)
           }

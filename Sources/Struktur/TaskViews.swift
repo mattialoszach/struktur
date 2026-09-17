@@ -40,7 +40,7 @@ struct TasksPage: View {
       HStack(alignment: .bottom) {
         VStack(alignment: .leading, spacing: 4) {
           Text("Tasks").font(.strukturSerif(30, weight: .semibold))
-          Text("Clear, finite, and connected to your time.").font(.caption).foregroundStyle(
+          EditableWording(.tasksSubtitle).font(.caption).foregroundStyle(
             .secondary)
         }
         Spacer()
@@ -71,7 +71,7 @@ struct TasksPage: View {
 
           if filteredTasks.isEmpty {
             EmptyState(
-              icon: "checkmark.circle", title: "Beautifully clear",
+              icon: "checkmark.circle", title: "No matching tasks",
               message: "No tasks match this view.")
           } else {
             ScrollView {
@@ -268,7 +268,7 @@ struct TaskEditorSheet: View {
   var body: some View {
     VStack(spacing: 0) {
       SheetHeader(
-        title: isNew ? "New task" : "Edit task", subtitle: "Give the work a clear next step")
+        title: isNew ? "New task" : "Edit task", subtitle: "Set a deadline, schedule time, or add notes.")
       Divider()
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {

@@ -194,7 +194,7 @@ struct SidebarView: View {
 
       ScrollView {
         VStack(alignment: .leading, spacing: 0) {
-          Eyebrow(text: "A place for everything").padding(.horizontal, 22).padding(.bottom, 12)
+          Eyebrow(wording: .sidebarEyebrow).padding(.horizontal, 22).padding(.bottom, 12)
           VStack(spacing: 4) {
             ForEach(AppSection.allCases.filter { $0 != .settings }) { section in
               Button {
@@ -254,7 +254,7 @@ struct SidebarView: View {
             }.buttonStyle(.plain)
           }
           if store.projects.isEmpty {
-            Text("Make space for a new idea.").font(.caption).foregroundStyle(StrukturTheme.muted)
+            Text("No spaces yet").font(.caption).foregroundStyle(StrukturTheme.muted)
               .padding(.horizontal, 22)
           }
         }
@@ -456,7 +456,7 @@ struct SearchPanel: View {
       }
       Divider()
       HStack {
-        Text("Everything has a place. Find yours.").font(.caption2).foregroundStyle(
+        Text("Search tasks, events, spaces, and goals.").font(.caption2).foregroundStyle(
           StrukturTheme.muted)
         Spacer()
         Text("⌘ K").font(.caption2)

@@ -10,7 +10,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case .overview: "Your day"
     case .projects: "Spaces"
     case .focus: "Focus room"
-    case .insights: "Your rhythm"
+    case .insights: "Insights"
     default: rawValue.capitalized
     }
   }
@@ -174,10 +174,10 @@ enum DashboardWidgetKind: String, CaseIterable, Codable, Identifiable {
   var title: String {
     switch self {
     case .dayFlow: "Day timeline"
-    case .tasks: "Your next moves"
-    case .focus: "A little focus"
-    case .deadlines: "On the horizon"
-    case .connections: "Everything, connected"
+    case .tasks: "Tasks"
+    case .focus: "Focus"
+    case .deadlines: "Deadlines"
+    case .connections: "Spaces overview"
     case .momentum: "Momentum"
     case .todayProgress: "Today’s progress"
     case .upcoming: "Up next"
@@ -217,13 +217,14 @@ struct UserPreferences: Codable, Equatable {
   var displayName = ""
   var dashboardCalendarMode: CalendarViewMode? = .day
   var focusDurationMinutes: Int? = 25
+  var wordingOverrides: [String: String]?
 
   init() {}
 
   private enum CodingKeys: String, CodingKey {
     case defaultCalendarMode, taskRailPosition, appearance, weekStartsMonday, showWeekends
     case workingDayStart, workingDayEnd, showCompletedTasks, enabledWidgets, widgetLayout,
-      displayName, dashboardCalendarMode, focusDurationMinutes
+      displayName, dashboardCalendarMode, focusDurationMinutes, wordingOverrides
   }
 
   init(from decoder: Decoder) throws {
@@ -246,6 +247,7 @@ struct UserPreferences: Codable, Equatable {
         .momentum, .projectPulse,
       ]
     displayName = try values.decodeIfPresent(String.self, forKey: .displayName) ?? ""
+    wordingOverrides = try values.decodeIfPresent([String: String].self, forKey: .wordingOverrides)
     dashboardCalendarMode =
       try values.decodeIfPresent(CalendarViewMode.self, forKey: .dashboardCalendarMode) ?? .day
     focusDurationMinutes = min(

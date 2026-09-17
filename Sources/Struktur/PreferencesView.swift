@@ -68,7 +68,7 @@ struct GeneralPreferences: View {
     ScrollView {
       VStack(spacing: 16) {
         PreferenceGroup(
-          title: "Make yourself at home", detail: "A little personal touch for your workspace."
+          title: "Personalization", detail: "Your name and workspace appearance."
         ) {
           TextField(
             "Your name",
@@ -204,7 +204,7 @@ struct DashboardPreferences: View {
     ScrollView {
       VStack(spacing: 16) {
         PreferenceGroup(
-          title: "A workspace that moves with you",
+          title: "Dashboard layout",
           detail:
             "Use Edit layout on Your day to drag widgets into place and resize their corners. Each widget also has size and space options in its menu."
         ) {
@@ -213,7 +213,7 @@ struct DashboardPreferences: View {
             Button("Restore starter layout") { resetLayout = true }
           }
           Toggle(
-            "Show completed tasks in the next-moves widget",
+            "Show completed tasks in the tasks widget",
             isOn: Binding(
               get: { store.preferences.showCompletedTasks },
               set: { value in store.updatePreferences { $0.showCompletedTasks = value } }))
@@ -278,7 +278,7 @@ struct DataPreferences: View {
     ScrollView {
       VStack(spacing: 16) {
         PreferenceGroup(
-          title: "Portable by design",
+          title: "Import and export",
           detail: "Export every task, project, event, preference, and note as readable JSON."
         ) {
           Picker("Export", selection: $exportProjectID) {

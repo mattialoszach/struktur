@@ -1,5 +1,7 @@
 // Read or exercise the accessibility tree of an explicitly selected preview process.
-// Usage: swift scripts/ui-check.swift <pid> list|press|set|frames|drag|resize|adjust [label] [value]
+// Usage: swift scripts/ui-check.swift <pid> <operation> [label] [value]
+// Operations: list, press, set, frames, scroll, drag, resize, adjust, capture,
+// replay-drag, replay-resize, replay-click, replay-double-click, replay-key (return/escape/tab), replay-text.
 import AppKit
 import ApplicationServices
 
@@ -15,6 +17,28 @@ else {
 }
 let operation = CommandLine.arguments[2]
 let label = CommandLine.arguments.count > 3 ? CommandLine.arguments[3] : ""
+if operation.hasPrefix("replay-") && app.executableURL?.path.contains("/.build/") != true {
+  fail("Event replay is restricted to debug preview binaries.")
+}
+if operation == "replay-text" {
+  DistributedNotificationCenter.default().postNotificationName(
+    Notification.Name("app.struktur.preview.replay"), object: String(pid),
+    userInfo: ["text": label], deliverImmediately: true)
+  RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+  print("Replaced the focused preview editor's text")
+  exit(0)
+}
+if operation == "replay-key" {
+  guard let code = ["return": 36, "tab": 48, "escape": 53][label] else {
+    fail("Supply return, tab, or escape.")
+  }
+  DistributedNotificationCenter.default().postNotificationName(
+    Notification.Name("app.struktur.preview.replay"), object: String(pid),
+    userInfo: ["keyCode": code], deliverImmediately: true)
+  RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+  print("Replayed \(label)")
+  exit(0)
+}
 if operation == "capture" {
   DistributedNotificationCenter.default().postNotificationName(
     Notification.Name("app.struktur.preview.capture"), object: String(pid), userInfo: nil,
@@ -48,6 +72,7 @@ func names(_ element: AXUIElement) -> [String] {
     string(element, kAXDescriptionAttribute as CFString),
     string(element, kAXValueAttribute as CFString), string(element, kAXHelpAttribute as CFString),
     string(element, kAXPlaceholderValueAttribute as CFString),
+    string(element, kAXIdentifierAttribute as CFString),
   ]
 }
 func rect(_ element: AXUIElement) -> CGRect? {
@@ -129,6 +154,21 @@ if operation == "scroll" {
     bar, kAXValueAttribute as CFString, NSNumber(value: fraction))
   guard result == .success else { fail("Scroll failed: \(result)") }
   print("Scrolled to \(fraction)")
+  exit(0)
+}
+if operation == "replay-click" || operation == "replay-double-click" {
+  guard let frame = rect(named(label)),
+    let window = (value(application, kAXWindowsAttribute as CFString) as? [AXUIElement] ?? [])
+      .compactMap({ rect($0) }).first(where: { $0.contains(frame) })
+  else { fail("The click target must be visible in the preview window.") }
+  DistributedNotificationCenter.default().postNotificationName(
+    Notification.Name("app.struktur.preview.replay"), object: String(pid),
+    userInfo: [
+      "x": frame.midX - window.minX, "y": window.maxY - frame.midY,
+      "clickCount": operation == "replay-double-click" ? 2 : 1,
+    ], deliverImmediately: true)
+  RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+  print("Replayed \(operation) on \(label)")
   exit(0)
 }
 if ["drag", "resize", "replay-drag", "replay-resize"].contains(operation) {
