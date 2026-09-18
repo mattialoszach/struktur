@@ -337,6 +337,9 @@ final class WorkspaceStore: ObservableObject {
       return copy
     }
     subset.scratchpad = ""
+    subset.notes = nil
+    subset.noteFolders = nil
+    subset.noteLibrary = nil
     subset.focusSession = nil
     subset.focusDraftTitle = nil
     subset.preferences.widgetLayout = subset.preferences.widgetLayout?.map { widget in
@@ -464,6 +467,116 @@ final class WorkspaceStore: ObservableObject {
     } else {
       saveNow()
     }
+  }
+
+  var notes: [NoteDocument] { workspace.notes ?? [] }
+  var noteFolders: [NoteFolder] { workspace.noteFolders ?? [] }
+  var noteLibrary: NoteLibraryPreferences { workspace.noteLibrary ?? NoteLibraryPreferences() }
+
+  func note(_ id: UUID?) -> NoteDocument? { notes.first { $0.id == id } }
+
+  @discardableResult func createNote(folderID: UUID? = nil, title: String = "Untitled note",
+    markdown: String = "") -> UUID {
+    let note = NoteDocument(title: title, markdown: markdown,
+      folderID: noteFolders.contains { $0.id == folderID } ? folderID : nil)
+    workspace.notes = notes + [note]
+    revealNote(note.id)
+    updateNoteLibrary { $0.preview = false }
+    return note.id
+  }
+
+  func editNote(_ id: UUID, _ edit: (inout NoteDocument) -> Void) {
+    guard let index = workspace.notes?.firstIndex(where: { $0.id == id }) else { return }
+    let previous = workspace.notes![index]
+    var value = previous
+    edit(&value)
+    guard value.id == id, value != workspace.notes![index] else { return }
+    // Existing folders/images were validated at ingestion. Typing must not
+    // repeatedly decode every image or walk every folder's ancestry.
+    guard (try? value.validateContent(
+      folderIDs: Set(noteFolders.map(\.id)), checkImages: value.attachments != previous.attachments
+    )) != nil else { return }
+    value.updatedAt = Date()
+    workspace.notes?[index] = value
+    changed(debounce: true)
+  }
+
+  func revealNote(_ id: UUID) {
+    guard let note = note(id), note.deletedAt == nil else { return }
+    var ancestors: [UUID] = [], cursor = note.folderID
+    while let folderID = cursor, !ancestors.contains(folderID),
+      let folder = noteFolders.first(where: { $0.id == folderID }) {
+      ancestors.append(folderID)
+      cursor = folder.parentID
+    }
+    updateNoteLibrary {
+      $0.selectedNoteID = id
+      $0.folderID = note.folderID
+      $0.expandedFolderIDs = Array(Set($0.expandedFolderIDs + ancestors)).sorted { $0.uuidString < $1.uuidString }
+    }
+  }
+
+  func updateNoteLibrary(_ edit: (inout NoteLibraryPreferences) -> Void) {
+    var value = noteLibrary
+    edit(&value)
+    guard value != workspace.noteLibrary else { return }
+    workspace.noteLibrary = value
+    changed(debounce: true)
+  }
+
+  @discardableResult func createNoteFolder(name: String, parentID: UUID? = nil) -> UUID? {
+    let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty else { return nil }
+    let folder = NoteFolder(name: name, parentID: parentID)
+    var candidate = workspace
+    candidate.noteFolders = noteFolders + [folder]
+    guard (try? candidate.validateNotes()) != nil else { return nil }
+    workspace.noteFolders = candidate.noteFolders
+    changed()
+    return folder.id
+  }
+
+  @discardableResult func updateNoteFolder(_ id: UUID, name: String, parentID: UUID?) -> Bool {
+    guard let index = noteFolders.firstIndex(where: { $0.id == id }) else { return false }
+    var candidate = workspace
+    candidate.noteFolders?[index].name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    candidate.noteFolders?[index].parentID = parentID
+    guard (try? candidate.validateNotes()) != nil else { return false }
+    workspace.noteFolders = candidate.noteFolders
+    changed()
+    return true
+  }
+
+  /// Removing a folder keeps its notes and subfolders at the parent level.
+  func removeNoteFolder(_ id: UUID) {
+    guard let folder = noteFolders.first(where: { $0.id == id }) else { return }
+    workspace.noteFolders?.removeAll { $0.id == id }
+    for index in (workspace.noteFolders ?? []).indices where workspace.noteFolders?[index].parentID == id {
+      workspace.noteFolders?[index].parentID = folder.parentID
+    }
+    for index in notes.indices where workspace.notes?[index].folderID == id {
+      workspace.notes?[index].folderID = folder.parentID
+    }
+    if workspace.noteLibrary?.folderID == id { workspace.noteLibrary?.folderID = folder.parentID }
+    workspace.noteLibrary?.expandedFolderIDs.removeAll { $0 == id }
+    changed()
+  }
+
+  func permanentlyDeleteNote(_ id: UUID) {
+    guard note(id)?.deletedAt != nil else { return }
+    workspace.notes?.removeAll { $0.id == id }
+    if workspace.noteLibrary?.selectedNoteID == id { workspace.noteLibrary?.selectedNoteID = nil }
+    changed()
+  }
+
+  func noteFolderPath(_ id: UUID?) -> String {
+    var names: [String] = [], cursor = id, visited: Set<UUID> = []
+    while let current = cursor, visited.insert(current).inserted,
+      let folder = noteFolders.first(where: { $0.id == current }) {
+      names.insert(folder.name, at: 0)
+      cursor = folder.parentID
+    }
+    return names.isEmpty ? "Unfiled" : names.joined(separator: " / ")
   }
 
   static func sampleWorkspace(now: Date = Date()) -> Workspace {

@@ -45,6 +45,10 @@ struct RootView: View {
         $0.disablesAnimations = true
       }
     }
+    .focusedValue(\.createNote) {
+      store.createNote(folderID: store.noteLibrary.folderID)
+      selection = .notes
+    }
     .focusedValue(\.showQuickCapture) { quickCapture = $0 }
     .focusedValue(\.navigateToday) {
       selectedDate = Date()
@@ -60,7 +64,10 @@ struct RootView: View {
     .sheet(isPresented: $showingSearch) {
       SearchPanel { section, projectID in
         selection = section
-        selectedProjectID = projectID
+        if section == .notes {
+          if let projectID { store.revealNote(projectID) }
+        }
+        else { selectedProjectID = projectID }
       }
     }
     .sheet(item: $linkedTask) { TaskEditorSheet(task: $0) }
@@ -98,6 +105,9 @@ struct RootView: View {
       case .goal:
         linkedGoal = store.goals.first { $0.id == id }
         referenceNotFound = linkedGoal == nil
+      case .note:
+        store.revealNote(id)
+        selection = .notes
       case .space:
         if store.project(id) != nil {
           selectedProjectID = id
@@ -141,6 +151,10 @@ struct RootView: View {
       }.buttonStyle(.plain).keyboardShortcut("k", modifiers: .command)
       Rectangle().fill(StrukturTheme.hairline).frame(width: 1, height: 16).padding(.horizontal, 4)
       Menu {
+        Button("New note", systemImage: "square.and.pencil") {
+          store.createNote()
+          selection = .notes
+        }
         Button("New task", systemImage: "checkmark.circle") { quickCapture = .task }
         Button("New calendar block", systemImage: "calendar") { quickCapture = .event }
         Button("New space", systemImage: "suit.club.fill") { showingProject = true }
@@ -160,6 +174,7 @@ struct RootView: View {
     case .calendar: CalendarPage(selectedDate: $selectedDate)
     case .tasks: TasksPage()
     case .projects: ProjectsPage(selectedProjectID: $selectedProjectID)
+    case .notes: NotesPage()
     case .goals: GoalsPage()
     case .focus: FocusPage()
     case .insights: InsightsPage()
@@ -392,7 +407,7 @@ struct SearchPanel: View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
         Image(systemName: "magnifyingglass").foregroundStyle(StrukturTheme.muted)
-        TextField("Find tasks, events, spaces, or a UID…", text: $query).textFieldStyle(.plain)
+        TextField("Find notes, tasks, events, spaces, or a UID…", text: $query).textFieldStyle(.plain)
           .font(.system(size: 17)).focused($focused)
         Button("Esc") { dismiss() }.buttonStyle(.plain).font(.caption).foregroundStyle(
           StrukturTheme.muted)
@@ -450,6 +465,14 @@ struct SearchPanel: View {
                   icon: "scope")
               }.buttonStyle(.plain)
             }
+            ForEach(store.notes.filter { $0.deletedAt == nil && matches($0.title + $0.markdown + $0.id.uuidString) }) { note in
+              Button {
+                navigate(.notes, note.id)
+                dismiss()
+              } label: {
+                row(note.displayTitle, detail: "Note · \(store.noteFolderPath(note.folderID))", icon: "doc.text")
+              }.buttonStyle(.plain)
+            }
             if !hasMatches {
               EmptyState(
                 icon: "magnifyingglass", title: "Nothing here yet",
@@ -460,7 +483,7 @@ struct SearchPanel: View {
       }
       Divider()
       HStack {
-        Text("Search tasks, events, spaces, and goals.").font(.caption2).foregroundStyle(
+        Text("Search notes, tasks, events, spaces, and goals.").font(.caption2).foregroundStyle(
           StrukturTheme.muted)
         Spacer()
         Text("⌘ K").font(.caption2)
@@ -487,6 +510,7 @@ struct SearchPanel: View {
   }
   private var hasMatches: Bool {
     store.tasks.contains { matches($0.title + $0.notes + $0.id.uuidString) }
+      || store.notes.contains { $0.deletedAt == nil && matches($0.title + $0.markdown + $0.id.uuidString) }
       || !matchingEntries.isEmpty
       || store.projects.contains { matches($0.name + $0.detail + $0.id.uuidString) }
       || store.goals.contains { matches($0.title + $0.detail + $0.id.uuidString) }

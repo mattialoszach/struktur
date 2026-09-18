@@ -38,11 +38,14 @@ struct StrukturApp: App {
 struct StrukturCommands: Commands {
   @FocusedValue(\.showQuickCapture) private var showQuickCapture
   @FocusedValue(\.navigateToday) private var navigateToday
+  @FocusedValue(\.createNote) private var createNote
 
   var body: some Commands {
     CommandGroup(replacing: .newItem) {
       Button("New task") { showQuickCapture?(.task) }
         .keyboardShortcut("n", modifiers: [.command])
+      Button("New note") { createNote?() }
+        .keyboardShortcut("n", modifiers: [.command, .option])
       Button("New event") { showQuickCapture?(.event) }
         .keyboardShortcut("n", modifiers: [.command, .shift])
     }
@@ -65,11 +68,19 @@ private struct ShowQuickCaptureKey: FocusedValueKey {
   typealias Value = (QuickCaptureKind) -> Void
 }
 
+private struct CreateNoteKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
 private struct NavigateTodayKey: FocusedValueKey {
   typealias Value = () -> Void
 }
 
 extension FocusedValues {
+  var createNote: (() -> Void)? {
+    get { self[CreateNoteKey.self] }
+    set { self[CreateNoteKey.self] = newValue }
+  }
   var showQuickCapture: ((QuickCaptureKind) -> Void)? {
     get { self[ShowQuickCaptureKey.self] }
     set { self[ShowQuickCaptureKey.self] = newValue }

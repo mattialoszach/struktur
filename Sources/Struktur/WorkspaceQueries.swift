@@ -2,6 +2,7 @@ import Foundation
 
 extension Workspace {
   func validate() throws {
+    try validateNotes()
     guard (1...3).contains(schemaVersion) else {
       throw WorkspaceValidationError.invalid(
         "This workspace was created by a newer version of Struktur.")

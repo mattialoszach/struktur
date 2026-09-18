@@ -59,20 +59,7 @@ struct MarkdownContent: View {
         return .handled
       })
       .sheet(item: $reference) { target in
-        switch target.kind {
-        case .task:
-          if let task = store.tasks.first(where: { $0.id == target.id }) {
-            TaskEditorSheet(task: task)
-          }
-        case .event:
-          if let entry = store.resolveEntry(target.id) { EventEditorSheet(entry: entry) }
-        case .goal:
-          if let goal = store.goals.first(where: { $0.id == target.id }) {
-            GoalEditorSheet(goal: goal)
-          }
-        case .space:
-          if let project = store.project(target.id) { ProjectEditorSheet(project: project) }
-        }
+        WorkspaceReferenceDestination(reference: target)
       }
       .alert("Reference not found", isPresented: $referenceNotFound) {
         Button("OK", role: .cancel) {}
@@ -116,7 +103,7 @@ enum MarkdownChecklist {
 }
 
 struct WorkspaceReference: Identifiable, Equatable {
-  enum Kind: String { case task, event, goal, space }
+  enum Kind: String { case task, event, goal, space, note }
   let kind: Kind
   let id: UUID
 
@@ -139,6 +126,7 @@ extension WorkspaceStore {
     case .event: resolveEntry(reference.id) != nil
     case .goal: goals.contains { $0.id == reference.id }
     case .space: project(reference.id) != nil
+    case .note: note(reference.id).map { $0.deletedAt == nil } ?? false
     }
   }
 }

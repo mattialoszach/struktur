@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 enum AppSection: String, CaseIterable, Identifiable {
-  case overview, calendar, tasks, projects, goals, focus, insights, settings
+  case overview, calendar, tasks, projects, notes, goals, focus, insights, settings
 
   var id: String { rawValue }
   var title: String {
@@ -20,6 +20,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case .calendar: "calendar"
     case .tasks: "checkmark.circle"
     case .projects: "square.stack.3d.up"
+    case .notes: "book.closed"
     case .focus: "timer"
     case .insights: "chart.xyaxis.line"
     case .goals: "scope"
@@ -283,6 +284,9 @@ struct Workspace: Codable, Equatable {
   var isDemo: Bool?
   var goals: [TrackedGoal]?
   var appleEventLinks: [String: String]?
+  var notes: [NoteDocument]?
+  var noteFolders: [NoteFolder]?
+  var noteLibrary: NoteLibraryPreferences?
 }
 
 extension Calendar {

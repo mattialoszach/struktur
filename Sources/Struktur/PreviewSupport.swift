@@ -37,6 +37,18 @@ extension WorkspaceStore {
           ]
         }
         store.replaceWorkspace(sample)
+        if ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_FIXTURE"] == "notes" {
+          let folder = store.createNoteFolder(name: "Study")
+          let child = store.createNoteFolder(name: "Design systems", parentID: folder)
+          store.createNote(title: "Small ideas", markdown: "A place for thoughts worth keeping.")
+          let source = "# A language we share\n\nGood systems make everyday choices **easier**. Keep the useful patterns close, and leave room to explore.\n\n## From today's lecture\n\n- [ ] Review the typography examples\n- [x] Collect three useful references\n\n> Consistency gives us room to focus on what matters.\n\n## Next steps\n\n1. Sketch a small component library\n2. Compare the patterns with our project\n\n[Open the related task](struktur://task/\(store.tasks[0].id))\n\n`spacing = 8`\n"
+          let id = store.createNote(folderID: child, title: "Design systems · Week 3", markdown: source)
+          let range = (source as NSString).range(of: "everyday choices")
+          store.editNote(id) { $0.decorations = [NoteDecoration(location: range.location, length: range.length, color: .gold, highlight: true)] }
+          store.updateNoteLibrary { $0.expandedFolderIDs = [folder, child].compactMap { $0 }; $0.folderID = child }
+          store.saveNow()
+        }
+
         FileHandle.standardOutput.write(
           Data(
             "Preview PID: \(ProcessInfo.processInfo.processIdentifier); workspace: \(directory.appending(path: "workspace.json").path)\n"
@@ -65,7 +77,7 @@ enum PreviewSupport {
             return
           }
           if let keyCode = info["keyCode"] as? Int,
-            [36, 48, 53, 123, 124, 125, 126].contains(keyCode)
+            [6, 36, 48, 53, 123, 124, 125, 126].contains(keyCode)
           {
             DispatchQueue.main.async { replayKey(UInt16(keyCode)) }
             return
@@ -152,7 +164,7 @@ enum PreviewSupport {
 
     @MainActor private static func replayKey(_ code: UInt16) {
       guard
-        let window = previewTextField()?.window ?? NSApplication.shared.keyWindow
+        let window = NSApplication.shared.modalWindow ?? NSApplication.shared.keyWindow ?? previewTextField()?.window
           ?? NSApplication.shared.windows.first(where: {
             $0.isVisible && $0.styleMask.contains(.resizable)
           })
@@ -164,11 +176,11 @@ enum PreviewSupport {
       for type in [NSEvent.EventType.keyDown, .keyUp] {
         let character =
           [
-            36: "\r", 48: "\t", 53: "\u{1b}", 123: "\u{f702}", 124: "\u{f703}",
+            6: "z", 36: "\r", 48: "\t", 53: "\u{1b}", 123: "\u{f702}", 124: "\u{f703}",
             125: "\u{f701}", 126: "\u{f700}",
           ][Int(code)] ?? ""
         if let event = NSEvent.keyEvent(
-          with: type, location: .zero, modifierFlags: [],
+          with: type, location: .zero, modifierFlags: code == 6 ? [.command] : [],
           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
           context: nil, characters: character, charactersIgnoringModifiers: character,
           isARepeat: false, keyCode: code)
@@ -179,7 +191,25 @@ enum PreviewSupport {
     }
 
     @MainActor private static func replayText(_ text: String) {
-      guard let field = previewTextField() else { return }
+      var target = previewTextField()?.window ?? NSApplication.shared.modalWindow
+        ?? NSApplication.shared.keyWindow
+        ?? NSApplication.shared.windows.first(where: {
+          $0.isVisible && $0.styleMask.contains(.resizable) && !$0.isSheet
+        })
+      while let sheet = target?.attachedSheet { target = sheet }
+      guard let window = target else { return }
+      window.makeKeyAndOrderFront(nil)
+      NSApplication.shared.activate(ignoringOtherApps: true)
+      if let editor = window.firstResponder as? NSTextView, editor.isEditable {
+        editor.selectAll(nil)
+        editor.insertText(text, replacementRange: editor.selectedRange())
+        return
+      }
+      func find(in view: NSView) -> NSTextField? {
+        if let field = view as? NSTextField, field.isEditable, !field.isHidden { return field }
+        return view.subviews.lazy.compactMap { find(in: $0) }.first
+      }
+      guard let field = window.contentView.flatMap({ find(in: $0) }) else { return }
       field.selectText(nil)
       guard let editor = field.currentEditor() as? NSTextView else { return }
       editor.selectAll(nil)

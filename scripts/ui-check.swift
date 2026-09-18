@@ -1,6 +1,6 @@
 // Read or exercise the accessibility tree of an explicitly selected preview process.
 // Usage: swift scripts/ui-check.swift <pid> <operation> [label] [value]
-// Operations: list, press, set, frames, scroll, drag, resize, adjust, capture,
+// Operations: list, press, set, select (location,length), frames, scroll, drag, resize, adjust, capture,
 // replay-drag, replay-resize, replay-hold-drag, replay-hold-resize (Escape cancels), capture-now,
 // replay-click, replay-double-click, replay-key (return/escape/tab/left/right/up/down), replay-text.
 import AppKit
@@ -32,11 +32,11 @@ if operation == "replay-text" {
 if operation == "replay-key" {
   guard
     let code = [
-      "return": 36, "tab": 48, "escape": 53, "left": 123, "right": 124,
+      "undo": 6, "return": 36, "tab": 48, "escape": 53, "left": 123, "right": 124,
       "down": 125, "up": 126,
     ][label]
   else {
-    fail("Supply return, tab, escape, left, right, up, or down.")
+    fail("Supply undo, return, tab, escape, left, right, up, or down.")
   }
   DistributedNotificationCenter.default().postNotificationName(
     Notification.Name("app.struktur.preview.replay"), object: String(pid),
@@ -247,6 +247,17 @@ if operation == "list" {
   let result = AXUIElementPerformAction(element, kAXPressAction as CFString)
   guard result == .success else { fail("Press failed: \(result)") }
   print("Pressed: \(label)")
+} else if operation == "select" {
+  guard CommandLine.arguments.count > 4 else { fail("Supply location,length") }
+  let parts = CommandLine.arguments[4].split(separator: ",").compactMap { Int($0) }
+  guard parts.count == 2, parts.allSatisfy({ $0 >= 0 }) else { fail("Supply nonnegative location,length") }
+  var range = CFRange(location: parts[0], length: parts[1])
+  let element = named(label)
+  AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+  let value = AXValueCreate(.cfRange, &range)!
+  let result = AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value)
+  guard result == .success else { fail("Selection failed: \(result)") }
+  print("Selected text in \(label)")
 } else if operation == "set" {
   guard CommandLine.arguments.count > 4,
     let element = elements.last(where: {
