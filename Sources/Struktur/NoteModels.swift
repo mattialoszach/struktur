@@ -53,8 +53,12 @@ struct NoteDocument: Identifiable, Codable, Equatable {
   }
 
   /// Preserve annotation anchors using UTF-16 offsets, matching AppKit's text selections.
-  mutating func replaceMarkdown(_ value: String) {
-    guard value != markdown else { return }
+  mutating func replaceMarkdown(
+    _ value: String, editedRange: NSRange? = nil, changeInLength: Int = 0
+  ) {
+    // Native storage vends UTF-16 strings. Swift's canonical Unicode equality
+    // can walk/normalize a long common prefix even for a one-character edit.
+    guard !(value as NSString).isEqual(to: markdown) else { return }
     // Most notes have no range annotations. Avoid allocating two arrays of every
     // grapheme in a long document on every keystroke in that common case.
     guard !decorations.isEmpty else {
@@ -62,17 +66,33 @@ struct NoteDocument: Identifiable, Codable, Equatable {
       updatedAt = Date()
       return
     }
-    let old = Array(markdown)
-    let new = Array(value)
-    var prefix = 0
-    while prefix < min(old.count, new.count), old[prefix] == new[prefix] { prefix += 1 }
-    var suffix = 0
-    while suffix < min(old.count, new.count) - prefix,
-      old[old.count - 1 - suffix] == new[new.count - 1 - suffix]
-    { suffix += 1 }
-    let start = String(old.prefix(prefix)).utf16.count
-    let removed = String(old[prefix..<(old.count - suffix)]).utf16.count
-    let inserted = String(new[prefix..<(new.count - suffix)]).utf16.count
+    let start: Int
+    let removed: Int
+    let inserted: Int
+    if let editedRange, editedRange.location != NSNotFound,
+      editedRange.length >= changeInLength,
+      NSMaxRange(editedRange) <= value.utf16.count,
+      markdown.utf16.count + changeInLength == value.utf16.count
+    {
+      // AppKit already knows the exact UTF-16 edit. Diffing the entire document
+      // here made even a single highlight expensive on every keystroke.
+      start = editedRange.location
+      removed = editedRange.length - changeInLength
+      inserted = editedRange.length
+    } else {
+      // Imports and other whole-document replacements have no native edit range.
+      let old = Array(markdown)
+      let new = Array(value)
+      var prefix = 0
+      while prefix < min(old.count, new.count), old[prefix] == new[prefix] { prefix += 1 }
+      var suffix = 0
+      while suffix < min(old.count, new.count) - prefix,
+        old[old.count - 1 - suffix] == new[new.count - 1 - suffix]
+      { suffix += 1 }
+      start = String(old.prefix(prefix)).utf16.count
+      removed = String(old[prefix..<(old.count - suffix)]).utf16.count
+      inserted = String(new[prefix..<(new.count - suffix)]).utf16.count
+    }
     let end = start + removed
     let delta = inserted - removed
     decorations = decorations.compactMap { decoration in

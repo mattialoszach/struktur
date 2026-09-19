@@ -130,8 +130,8 @@ struct ScratchpadView: View {
         showsLivePreview: false, showsHelp: false, editorLabel: "Focus notes editor")
       HStack(spacing: 6) {
         Image(systemName: store.lastSaveError != nil ? "exclamationmark.triangle" : "checkmark.circle")
-        Text(store.lastSaveError != nil ? "Could not save notes."
-          : (store.isSavePending ? "Saving…" : "Autosaved"))
+        WorkspaceSaveIndicator(
+          status: store.saveStatus, failed: store.lastSaveError != nil, savedText: "Autosaved")
         Spacer()
         Text("A copy is kept with each finished session.")
       }.font(.caption2).foregroundStyle(StrukturTheme.muted)

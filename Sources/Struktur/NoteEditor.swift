@@ -71,7 +71,8 @@ struct NoteNativeEditor: NSViewRepresentable {
   var availableWidth: CGFloat
   let controller: NoteEditorController
   var editingEnabled = true
-  var onText: (String) -> Void
+  var currentNote: (() -> NoteDocument?)? = nil
+  var onText: (NoteDocument) -> Void
   var onImage: (Data, String) -> Void
   var onLink: (URL) -> Void
   @Environment(\.colorScheme) private var colorScheme
@@ -79,9 +80,11 @@ struct NoteNativeEditor: NSViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator(self) }
   func makeNSView(context: Context) -> NSScrollView {
     let scroll = NSScrollView()
+    scroll.wantsLayer = true
     scroll.hasVerticalScroller = true
     scroll.drawsBackground = false
-    let text = NoteTextView(frame: .zero)
+    let text = NoteTextView(usingTextLayoutManager: !preview)
+    text.wantsLayer = true
     text.isRichText = false
     text.allowsUndo = true
     text.isAutomaticQuoteSubstitutionEnabled = false
@@ -89,6 +92,8 @@ struct NoteNativeEditor: NSViewRepresentable {
     text.isAutomaticLinkDetectionEnabled = false
     text.isAutomaticTextReplacementEnabled = false
     text.isAutomaticSpellingCorrectionEnabled = false
+    text.isAutomaticTextCompletionEnabled = false
+    text.writingToolsBehavior = .none
     text.isContinuousSpellCheckingEnabled = true
     text.drawsBackground = false
     text.textContainerInset = NSSize(width: 20, height: 20)
@@ -96,12 +101,12 @@ struct NoteNativeEditor: NSViewRepresentable {
     text.isHorizontallyResizable = false
     text.autoresizingMask = [.width]
     text.textContainer?.widthTracksTextView = true
+    if preview { text.layoutManager?.allowsNonContiguousLayout = true }
     text.textContainer?.containerSize = NSSize(width: 460, height: CGFloat.greatestFiniteMagnitude)
     text.minSize = .zero
     text.maxSize = NSSize(
       width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
     text.delegate = context.coordinator
-    text.textStorage?.delegate = context.coordinator
     text.registerForDraggedTypes([.fileURL, .png, .tiff])
     scroll.documentView = text
     updateNSView(scroll, context: context)
@@ -120,17 +125,19 @@ struct NoteNativeEditor: NSViewRepresentable {
     context.coordinator.synchronize(view, dark: dark)
   }
   @MainActor
-  final class Coordinator: NSObject, NSTextViewDelegate, @preconcurrency NSTextStorageDelegate {
+  final class Coordinator: NSObject, NSTextViewDelegate {
     var parent: NoteNativeEditor
     var lastNote: NoteDocument?
     var lastDark = false
     var lastPreview = false
     var lastWidth: CGFloat = 0
     var applying = false
-    let styler = NoteLiveStyler()
+    let styler = NoteWriteStyle()
     var pendingEdit: (range: NSRange, delta: Int)?
     var multipleEdits = false
+    var needsFullStyle = false
     weak var editingView: NoteTextView?
+    private weak var observedStorage: NSTextStorage?
     init(_ parent: NoteNativeEditor) {
       self.parent = parent
       super.init()
@@ -151,14 +158,27 @@ struct NoteNativeEditor: NSViewRepresentable {
 
     func synchronize(_ view: NoteTextView, dark: Bool) {
       editingView = view
+      if observedStorage !== view.textStorage {
+        if let observedStorage {
+          NotificationCenter.default.removeObserver(
+            self, name: NSTextStorage.willProcessEditingNotification, object: observedStorage)
+        }
+        observedStorage = view.textStorage
+        NotificationCenter.default.addObserver(
+          self, selector: #selector(storageWillProcess(_:)),
+          name: NSTextStorage.willProcessEditingNotification, object: view.textStorage)
+      }
       guard !view.hasMarkedText() else { return }
-      let note = parent.note
+      // A GeometryReader/environment update can deliver a captured SwiftUI
+      // value after native typing has already advanced the canonical document.
+      let note = parent.currentNote?() ?? parent.note
       let sameContent =
-        lastNote?.id == note.id && lastNote?.markdown == note.markdown
+        lastNote?.id == note.id
+        && (lastNote?.markdown as NSString?)?.isEqual(to: note.markdown) == true
         && lastNote?.decorations == note.decorations
         && (!parent.preview || lastNote?.attachments == note.attachments)
       guard
-        !sameContent || lastDark != dark || lastPreview != parent.preview
+        !sameContent || needsFullStyle || lastDark != dark || lastPreview != parent.preview
           || (parent.preview && lastWidth != parent.availableWidth)
       else { return }
       applying = true
@@ -172,7 +192,7 @@ struct NoteNativeEditor: NSViewRepresentable {
             note, preview: true, dark: dark,
             width: max(160, parent.availableWidth - 40)))
       } else {
-        if view.string != note.markdown {
+        if !(view.string as NSString).isEqual(to: note.markdown) {
           // External replacements (import/checklist edits) invalidate text undo;
           // ordinary typing never comes through this path.
           storage.replaceCharacters(
@@ -192,45 +212,55 @@ struct NoteNativeEditor: NSViewRepresentable {
       lastPreview = parent.preview
       pendingEdit = nil
       multipleEdits = false
+      needsFullStyle = false
     }
     private func resetTypingAttributes(_ view: NSTextView, dark: Bool) {
-      // Do not inherit heading/code/link attributes into the next paragraph.
-      let paragraph = NSMutableParagraphStyle()
-      paragraph.lineSpacing = 5
-      paragraph.paragraphSpacing = 7
-      view.typingAttributes = [
-        .font: NSFont.systemFont(ofSize: 14),
-        .foregroundColor: dark ? NSColor.white : NSColor.labelColor, .paragraphStyle: paragraph,
-      ]
+      view.typingAttributes = NoteWriteStyle.attributes(dark: dark)
     }
-    func textStorage(
-      _ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
-      range editedRange: NSRange, changeInLength delta: Int
-    ) {
-      guard !applying, editedMask.contains(.editedCharacters) else { return }
+    @objc private func storageWillProcess(_ notification: Notification) {
+      guard !applying, let storage = notification.object as? NSTextStorage,
+        storage.editedMask.contains(.editedCharacters)
+      else { return }
+      // Capture before AppKit fixes paragraph attributes: didProcessEditing's
+      // range can include untouched text. A notification preserves TextKit 2's
+      // own NSTextContentStorage delegate and its viewport layout updates.
       if pendingEdit != nil { multipleEdits = true }
-      pendingEdit = (editedRange, delta)
+      pendingEdit = (storage.editedRange, storage.changeInLength)
     }
     func textDidChange(_ notification: Notification) {
       guard !applying, let view = notification.object as? NoteTextView,
         let storage = view.textStorage
       else { return }
-      // Keep IME composition untouched until AppKit commits it.
+      var note = lastNote ?? parent.note
+      let hadDecorations = !note.decorations.isEmpty
+      note.replaceMarkdown(
+        view.string, editedRange: multipleEdits ? nil : pendingEdit?.range,
+        changeInLength: pendingEdit?.delta ?? 0)
+      // Persist composition too, but leave its native marked-text attributes
+      // untouched. Its accumulated style changes are applied after commit.
       if !view.hasMarkedText() {
-        var note = lastNote ?? parent.note
-        note.replaceMarkdown(view.string)
         applying = true
-        styler.apply(
-          to: storage, note: note, dark: lastDark,
-          editedRange: multipleEdits ? nil : pendingEdit?.range,
-          changeInLength: pendingEdit?.delta ?? 0)
-        resetTypingAttributes(view, dark: lastDark)
-        lastNote = note
+        if hadDecorations || !note.decorations.isEmpty || needsFullStyle {
+          let range = multipleEdits || needsFullStyle ? nil : pendingEdit?.range
+          if let content = view.textContentStorage {
+            content.performEditingTransaction {
+              styler.apply(to: storage, note: note, dark: lastDark, editedRange: range)
+            }
+          } else {
+            styler.apply(to: storage, note: note, dark: lastDark, editedRange: range)
+          }
+          resetTypingAttributes(view, dark: lastDark)
+          view.needsDisplay = true
+        }
         applying = false
+        needsFullStyle = false
+      } else {
+        needsFullStyle = true
       }
+      lastNote = note
       pendingEdit = nil
       multipleEdits = false
-      parent.onText(view.string)
+      parent.onText(note)
     }
     func textViewDidChangeSelection(_ notification: Notification) {
       guard !applying, !parent.preview, let view = notification.object as? NSTextView else {

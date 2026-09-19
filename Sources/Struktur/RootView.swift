@@ -17,6 +17,10 @@ struct RootView: View {
   @State private var referenceNotFound = false
   private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
+  init(initialSection: AppSection = .overview) {
+    _selection = State(initialValue: initialSection)
+  }
+
   var body: some View {
     HStack(spacing: 0) {
       SidebarView(
@@ -66,8 +70,9 @@ struct RootView: View {
         selection = section
         if section == .notes {
           if let projectID { store.revealNote(projectID) }
+        } else {
+          selectedProjectID = projectID
         }
-        else { selectedProjectID = projectID }
       }
     }
     .sheet(item: $linkedTask) { TaskEditorSheet(task: $0) }
@@ -215,7 +220,7 @@ struct SidebarView: View {
           VStack(spacing: 4) {
             ForEach(AppSection.allCases.filter { $0 != .settings }) { section in
               Button {
-                withAnimation(.easeInOut(duration: 0.15)) { selection = section }
+                selection = section
               } label: {
                 HStack(spacing: 11) {
                   Image(systemName: section.icon).font(.system(size: 14, weight: .regular)).frame(
@@ -407,8 +412,10 @@ struct SearchPanel: View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
         Image(systemName: "magnifyingglass").foregroundStyle(StrukturTheme.muted)
-        TextField("Find notes, tasks, events, spaces, or a UID…", text: $query).textFieldStyle(.plain)
-          .font(.system(size: 17)).focused($focused)
+        TextField("Find notes, tasks, events, spaces, or a UID…", text: $query).textFieldStyle(
+          .plain
+        )
+        .font(.system(size: 17)).focused($focused)
         Button("Esc") { dismiss() }.buttonStyle(.plain).font(.caption).foregroundStyle(
           StrukturTheme.muted)
       }.padding(24)
@@ -465,12 +472,18 @@ struct SearchPanel: View {
                   icon: "scope")
               }.buttonStyle(.plain)
             }
-            ForEach(store.notes.filter { $0.deletedAt == nil && matches($0.title + $0.markdown + $0.id.uuidString) }) { note in
+            ForEach(
+              store.notes.filter {
+                $0.deletedAt == nil && matches($0.title + $0.markdown + $0.id.uuidString)
+              }
+            ) { note in
               Button {
                 navigate(.notes, note.id)
                 dismiss()
               } label: {
-                row(note.displayTitle, detail: "Note · \(store.noteFolderPath(note.folderID))", icon: "doc.text")
+                row(
+                  note.displayTitle, detail: "Note · \(store.noteFolderPath(note.folderID))",
+                  icon: "doc.text")
               }.buttonStyle(.plain)
             }
             if !hasMatches {
@@ -510,7 +523,9 @@ struct SearchPanel: View {
   }
   private var hasMatches: Bool {
     store.tasks.contains { matches($0.title + $0.notes + $0.id.uuidString) }
-      || store.notes.contains { $0.deletedAt == nil && matches($0.title + $0.markdown + $0.id.uuidString) }
+      || store.notes.contains {
+        $0.deletedAt == nil && matches($0.title + $0.markdown + $0.id.uuidString)
+      }
       || !matchingEntries.isEmpty
       || store.projects.contains { matches($0.name + $0.detail + $0.id.uuidString) }
       || store.goals.contains { matches($0.title + $0.detail + $0.id.uuidString) }
