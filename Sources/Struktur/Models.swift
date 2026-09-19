@@ -271,7 +271,7 @@ struct UserPreferences: Codable, Equatable {
   }
 }
 
-struct Workspace: Codable, Equatable {
+struct Workspace: Codable, Equatable, Sendable {
   var projects: [Project] = []
   var calendarEntries: [CalendarEntry] = []
   var tasks: [TaskItem] = []

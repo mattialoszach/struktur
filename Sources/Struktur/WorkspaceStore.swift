@@ -2,18 +2,35 @@ import Foundation
 import SwiftUI
 
 @MainActor
+final class WorkspaceSaveStatus: ObservableObject {
+  @Published fileprivate(set) var isPending = false
+}
+
+@MainActor
 final class WorkspaceStore: ObservableObject {
-  @Published private(set) var workspace: Workspace
+  // Mutators publish through changed(). Publishing this large value as well
+  // invalidated every workspace view for each native text-storage edit.
+  private(set) var workspace: Workspace
   @Published var lastSaveError: String?
-  @Published private(set) var isSavePending = false
+  let saveStatus = WorkspaceSaveStatus()
+  private(set) var isSavePending: Bool {
+    get { saveStatus.isPending }
+    set { if saveStatus.isPending != newValue { saveStatus.isPending = newValue } }
+  }
 
   private let fileURL: URL
+  private let writer: WorkspaceFileWriter
   private var saveTask: Task<Void, Never>?
   private var recoveryRequired = false
-  private var migrationBackupRequired = false
+  private var migrationBackup: URL?
+  private var revision = 0
+  private var savedRevision: Int?
+  private var saveRequest = UUID()
+  private var pendingPublication = false
 
-  init(fileURL: URL? = nil) {
+  init(fileURL: URL? = nil, writer: WorkspaceFileWriter = WorkspaceFileWriter()) {
     self.fileURL = fileURL ?? Self.defaultFileURL
+    self.writer = writer
     workspace = Self.sampleWorkspace()
     if FileManager.default.fileExists(atPath: self.fileURL.path) {
       do {
@@ -21,7 +38,11 @@ final class WorkspaceStore: ObservableObject {
         let decoded = try JSONDecoder.struktur.decode(Workspace.self, from: data)
         try decoded.validate()
         workspace = decoded
-        migrationBackupRequired = decoded.schemaVersion < 3
+        if decoded.schemaVersion >= 3 { savedRevision = revision }
+        if decoded.schemaVersion < 3 {
+          migrationBackup = self.fileURL.deletingLastPathComponent().appending(
+            path: "workspace-before-v3-\(UUID().uuidString).json")
+        }
       } catch {
         workspace = Workspace()
         recoveryRequired = true
@@ -230,7 +251,8 @@ final class WorkspaceStore: ObservableObject {
     for index in workspace.tasks.indices where workspace.tasks[index].projectID == id {
       workspace.tasks[index].projectID = nil
     }
-    for index in workspace.calendarEntries.indices where workspace.calendarEntries[index].projectID == id {
+    for index in workspace.calendarEntries.indices
+    where workspace.calendarEntries[index].projectID == id {
       workspace.calendarEntries[index].projectID = nil
     }
     if var goals = workspace.goals {
@@ -285,7 +307,9 @@ final class WorkspaceStore: ObservableObject {
     return (workspace.focusHistory ?? []).filter {
       query.isEmpty || focusRecordTitle($0).localizedStandardContains(query)
         || ($0.notes ?? "").localizedStandardContains(query)
-    }.sorted { $0.endedAt == $1.endedAt ? $0.id.uuidString < $1.id.uuidString : $0.endedAt > $1.endedAt }
+    }.sorted {
+      $0.endedAt == $1.endedAt ? $0.id.uuidString < $1.id.uuidString : $0.endedAt > $1.endedAt
+    }
   }
 
   func updateFocusRecord(id: UUID, title: String, notes: String) {
@@ -308,7 +332,7 @@ final class WorkspaceStore: ObservableObject {
 
   func replaceWorkspace(_ newWorkspace: Workspace) {
     recoveryRequired = false
-    migrationBackupRequired = false
+    migrationBackup = nil
     workspace = newWorkspace
     changed()
   }
@@ -379,33 +403,52 @@ final class WorkspaceStore: ObservableObject {
   func importData(_ data: Data) throws {
     let imported = try JSONDecoder.struktur.decode(Workspace.self, from: data)
     try imported.validate()
-    if FileManager.default.fileExists(atPath: fileURL.path) {
-      let backup = fileURL.deletingLastPathComponent().appending(
-        path: "workspace-backup-\(UUID().uuidString).json")
-      try FileManager.default.copyItem(at: fileURL, to: backup)
-    }
+    try writer.backupForImport(fileURL)
     replaceWorkspace(imported)
   }
 
   func saveNow() {
+    publishPendingChanges()
     saveTask?.cancel()
-    isSavePending = false
-    guard !recoveryRequired else { return }
-    do {
-      if migrationBackupRequired {
-        let backup = fileURL.deletingLastPathComponent().appending(
-          path: "workspace-before-v3-\(UUID().uuidString).json")
-        try FileManager.default.copyItem(at: fileURL, to: backup)
-        migrationBackupRequired = false
+    saveRequest = UUID()
+    // Disappearing views can each request a flush. A clean workspace must not
+    // encode/write again or publish an unchanged error back into navigation.
+    guard savedRevision != revision || lastSaveError != nil else { return }
+    if !recoveryRequired {
+      let error = writer.saveNow(saveSnapshot())
+      if lastSaveError != error { lastSaveError = error }
+      if error == nil {
+        migrationBackup = nil
+        savedRevision = revision
       }
-      workspace.schemaVersion = 3
-      let folder = fileURL.deletingLastPathComponent()
-      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-      try JSONEncoder.struktur.encode(workspace).write(to: fileURL, options: .atomic)
-      lastSaveError = nil
-    } catch {
-      lastSaveError = error.localizedDescription
     }
+    if isSavePending { isSavePending = false }
+  }
+
+  private func saveSnapshot() -> WorkspaceFileWriter.Snapshot {
+    workspace.schemaVersion = 3
+    return .init(workspace: workspace, url: fileURL, migrationBackup: migrationBackup)
+  }
+
+  private func autosave() async {
+    publishPendingChanges()
+    guard !recoveryRequired else {
+      isSavePending = false
+      return
+    }
+    let request = UUID()
+    saveRequest = request
+    let savedRevision = revision
+    let error = await writer.save(saveSnapshot())
+    // A completed older snapshot cannot claim newer typing is saved, erase a
+    // later failure, or override an explicit save/import's completion status.
+    guard saveRequest == request, revision == savedRevision else { return }
+    if lastSaveError != error { lastSaveError = error }
+    if error == nil {
+      migrationBackup = nil
+      self.savedRevision = savedRevision
+    }
+    isSavePending = false
   }
 
   func startFocus(minutes: Int, taskID: UUID? = nil, now: Date = Date()) {
@@ -454,19 +497,27 @@ final class WorkspaceStore: ObservableObject {
     }
   }
 
-  private func changed(debounce: Bool = false) {
-    objectWillChange.send()
+  private func changed(debounce: Bool = false, notify: Bool = true) {
+    revision += 1
+    pendingPublication = !notify
+    if notify { objectWillChange.send() }
     saveTask?.cancel()
     if debounce {
-      isSavePending = true
+      if !isSavePending { isSavePending = true }
       saveTask = Task { [weak self] in
         try? await Task.sleep(for: .milliseconds(350))
         guard !Task.isCancelled else { return }
-        self?.saveNow()
+        await self?.autosave()
       }
     } else {
       saveNow()
     }
+  }
+
+  private func publishPendingChanges() {
+    guard pendingPublication else { return }
+    pendingPublication = false
+    objectWillChange.send()
   }
 
   var notes: [NoteDocument] { workspace.notes ?? [] }
@@ -475,9 +526,12 @@ final class WorkspaceStore: ObservableObject {
 
   func note(_ id: UUID?) -> NoteDocument? { notes.first { $0.id == id } }
 
-  @discardableResult func createNote(folderID: UUID? = nil, title: String = "Untitled note",
-    markdown: String = "") -> UUID {
-    let note = NoteDocument(title: title, markdown: markdown,
+  @discardableResult func createNote(
+    folderID: UUID? = nil, title: String = "Untitled note",
+    markdown: String = ""
+  ) -> UUID {
+    let note = NoteDocument(
+      title: title, markdown: markdown,
       folderID: noteFolders.contains { $0.id == folderID } ? folderID : nil)
     workspace.notes = notes + [note]
     revealNote(note.id)
@@ -485,34 +539,56 @@ final class WorkspaceStore: ObservableObject {
     return note.id
   }
 
-  func editNote(_ id: UUID, _ edit: (inout NoteDocument) -> Void) {
+  func editNote(_ id: UUID, notify: Bool = true, _ edit: (inout NoteDocument) -> Void) {
     guard let index = workspace.notes?.firstIndex(where: { $0.id == id }) else { return }
     let previous = workspace.notes![index]
     var value = previous
     edit(&value)
-    guard value.id == id, value != workspace.notes![index] else { return }
+    guard value.id == id else { return }
+    if (value.markdown as NSString).isEqual(to: previous.markdown), value == previous { return }
     // Existing folders/images were validated at ingestion. Typing must not
     // repeatedly decode every image or walk every folder's ancestry.
-    guard (try? value.validateContent(
-      folderIDs: Set(noteFolders.map(\.id)), checkImages: value.attachments != previous.attachments
-    )) != nil else { return }
+    guard
+      (try? value.validateContent(
+        folderIDs: Set(noteFolders.map(\.id)),
+        checkImages: value.attachments != previous.attachments
+      )) != nil
+    else { return }
     value.updatedAt = Date()
     workspace.notes?[index] = value
-    changed(debounce: true)
+    changed(debounce: true, notify: notify)
+  }
+
+  /// Native typing is already drawn by NSTextView. Keep the canonical workspace
+  /// current immediately, then refresh word counts/search/library when typing
+  /// pauses. Save, export, navigation and quit never depend on a view-local draft.
+  func updateNoteText(_ note: NoteDocument) {
+    editNote(note.id, notify: false) {
+      $0.markdown = note.markdown
+      $0.decorations = note.decorations
+    }
+  }
+
+  func updateNoteTitle(_ id: UUID, title: String) {
+    editNote(id, notify: false) { $0.title = title }
   }
 
   func revealNote(_ id: UUID) {
     guard let note = note(id), note.deletedAt == nil else { return }
-    var ancestors: [UUID] = [], cursor = note.folderID
+    var ancestors: [UUID] = []
+    var cursor = note.folderID
     while let folderID = cursor, !ancestors.contains(folderID),
-      let folder = noteFolders.first(where: { $0.id == folderID }) {
+      let folder = noteFolders.first(where: { $0.id == folderID })
+    {
       ancestors.append(folderID)
       cursor = folder.parentID
     }
     updateNoteLibrary {
       $0.selectedNoteID = id
       $0.folderID = note.folderID
-      $0.expandedFolderIDs = Array(Set($0.expandedFolderIDs + ancestors)).sorted { $0.uuidString < $1.uuidString }
+      $0.expandedFolderIDs = Array(Set($0.expandedFolderIDs + ancestors)).sorted {
+        $0.uuidString < $1.uuidString
+      }
     }
   }
 
@@ -551,7 +627,8 @@ final class WorkspaceStore: ObservableObject {
   func removeNoteFolder(_ id: UUID) {
     guard let folder = noteFolders.first(where: { $0.id == id }) else { return }
     workspace.noteFolders?.removeAll { $0.id == id }
-    for index in (workspace.noteFolders ?? []).indices where workspace.noteFolders?[index].parentID == id {
+    for index in (workspace.noteFolders ?? []).indices
+    where workspace.noteFolders?[index].parentID == id {
       workspace.noteFolders?[index].parentID = folder.parentID
     }
     for index in notes.indices where workspace.notes?[index].folderID == id {
@@ -570,9 +647,12 @@ final class WorkspaceStore: ObservableObject {
   }
 
   func noteFolderPath(_ id: UUID?) -> String {
-    var names: [String] = [], cursor = id, visited: Set<UUID> = []
+    var names: [String] = []
+    var cursor = id
+    var visited: Set<UUID> = []
     while let current = cursor, visited.insert(current).inserted,
-      let folder = noteFolders.first(where: { $0.id == current }) {
+      let folder = noteFolders.first(where: { $0.id == current })
+    {
       names.insert(folder.name, at: 0)
       cursor = folder.parentID
     }
