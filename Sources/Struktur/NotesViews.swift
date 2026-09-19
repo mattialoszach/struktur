@@ -69,7 +69,7 @@ struct NotesPage: View {
         }
         .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("Add to notes")
       }
-      TextField("Search notes", text: $query).textFieldStyle(.roundedBorder)
+      TextField("Search notes", text: $query).strukturInput(compact: true)
         .accessibilityLabel("Search notes")
       HStack {
         scopeRow("Library", icon: "books.vertical", selected: !trash) {
@@ -287,18 +287,17 @@ struct NoteFolderSheet: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       Text(draft.folder == nil ? "New folder" : "Edit folder").font(.strukturSerif(26))
-      TextField("Folder name", text: $name).textFieldStyle(.roundedBorder).accessibilityLabel(
+      TextField("Folder name", text: $name).strukturInput().accessibilityLabel(
         "Folder name")
-      Picker("Inside", selection: $parentID) {
-        Text("Top level").tag(nil as UUID?)
-        ForEach(
-          store.noteFolders.filter { $0.id != draft.folder?.id }.sorted {
+      StrukturMenuPicker(
+        title: "Inside", selection: $parentID,
+        options: [StrukturMenuOption(value: UUID?.none, title: "Top level")]
+          + store.noteFolders.filter { $0.id != draft.folder?.id }.sorted {
             store.noteFolderPath($0.id) < store.noteFolderPath($1.id)
-          }
-        ) { folder in
-          Text(store.noteFolderPath(folder.id)).tag(Optional(folder.id))
-        }
-      }
+          }.map {
+            StrukturMenuOption(
+              value: Optional($0.id), title: store.noteFolderPath($0.id))
+          })
       if error {
         Text("Choose a different parent. Folders cannot contain themselves or exceed 32 levels.")
           .font(.caption).foregroundStyle(StrukturTheme.destructive)

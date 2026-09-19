@@ -83,6 +83,175 @@ struct StrukturButtonStyle: ButtonStyle {
   }
 }
 
+struct StrukturInputModifier: ViewModifier {
+  @FocusState private var isFocused: Bool
+  var compact = false
+
+  func body(content: Content) -> some View {
+    content
+      .textFieldStyle(.plain)
+      .font(.system(size: compact ? 11 : 12))
+      .padding(.horizontal, compact ? 9 : 12).padding(.vertical, compact ? 7 : 9)
+      .background(
+        isFocused ? StrukturTheme.editingSurface : StrukturTheme.surface,
+        in: RoundedRectangle(cornerRadius: 9)
+      )
+      .overlay {
+        RoundedRectangle(cornerRadius: 9).strokeBorder(
+          isFocused ? StrukturTheme.ink.opacity(0.24) : StrukturTheme.hairline)
+      }
+      .focused($isFocused)
+  }
+}
+
+extension View {
+  func strukturInput(compact: Bool = false) -> some View {
+    modifier(StrukturInputModifier(compact: compact))
+  }
+}
+
+struct StrukturToggleRow<Label: View>: View {
+  @Binding var isOn: Bool
+  let accessibilityTitle: String
+  @ViewBuilder let label: Label
+
+  init(
+    isOn: Binding<Bool>, accessibilityTitle: String,
+    @ViewBuilder label: () -> Label
+  ) {
+    _isOn = isOn
+    self.accessibilityTitle = accessibilityTitle
+    self.label = label()
+  }
+
+  var body: some View {
+    Toggle(isOn: $isOn) { label.font(.system(size: 12, weight: .medium)) }
+      .toggleStyle(StrukturSwitchToggleStyle())
+      .padding(.horizontal, 11).padding(.vertical, 9)
+      .background(StrukturTheme.editingSurface.opacity(0.48), in: RoundedRectangle(cornerRadius: 10))
+      .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(StrukturTheme.hairline) }
+      .accessibilityLabel(accessibilityTitle)
+  }
+}
+
+struct StrukturSwitchToggleStyle: ToggleStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    Button {
+      configuration.isOn.toggle()
+    } label: {
+      HStack(spacing: 12) {
+        configuration.label
+        Spacer(minLength: 12)
+        ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+          Capsule().fill(
+            configuration.isOn ? AccentToken.mint.color.opacity(0.78) : StrukturTheme.hairline)
+          Circle().fill(StrukturTheme.surface).padding(2)
+            .shadow(color: .black.opacity(0.10), radius: 1, y: 1)
+        }
+        .frame(width: 34, height: 20)
+        .overlay { Capsule().strokeBorder(StrukturTheme.ink.opacity(0.10)) }
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+extension StrukturToggleRow where Label == Text {
+  init(_ title: String, isOn: Binding<Bool>) {
+    self.init(isOn: isOn, accessibilityTitle: title) { Text(title) }
+  }
+}
+
+struct StrukturValueStepper: View {
+  let title: String
+  @Binding var value: Int
+  let range: ClosedRange<Int>
+  var step = 1
+  var valueText: (Int) -> String = { String($0) }
+
+  var body: some View {
+    HStack(spacing: 10) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(StrukturTheme.muted)
+        Text(valueText(value)).font(.system(size: 13, weight: .medium).monospacedDigit())
+          .foregroundStyle(StrukturTheme.ink)
+      }
+      Spacer(minLength: 12)
+      HStack(spacing: 4) {
+        stepButton("minus", label: "Decrease \(title.lowercased())", delta: -step)
+        stepButton("plus", label: "Increase \(title.lowercased())", delta: step)
+      }
+    }
+    .padding(.horizontal, 11).padding(.vertical, 9)
+    .background(StrukturTheme.editingSurface.opacity(0.48), in: RoundedRectangle(cornerRadius: 10))
+    .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(StrukturTheme.hairline) }
+  }
+
+  private func stepButton(_ icon: String, label: String, delta: Int) -> some View {
+    Button {
+      value = min(range.upperBound, max(range.lowerBound, value + delta))
+    } label: {
+      Image(systemName: icon).font(.system(size: 10, weight: .semibold)).frame(width: 25, height: 23)
+        .background(StrukturTheme.surface, in: RoundedRectangle(cornerRadius: 7))
+        .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(StrukturTheme.hairline) }
+    }
+    .buttonStyle(.plain)
+    .disabled(delta < 0 ? value <= range.lowerBound : value >= range.upperBound)
+    .accessibilityLabel(label)
+  }
+}
+
+struct StrukturMenuOption<Value: Hashable>: Identifiable {
+  let value: Value
+  let title: String
+  var id: Value { value }
+}
+
+struct StrukturMenuPicker<Value: Hashable>: View {
+  let title: String
+  @Binding var selection: Value
+  let options: [StrukturMenuOption<Value>]
+
+  var body: some View {
+    Menu {
+      ForEach(options) { option in
+        Button {
+          selection = option.value
+        } label: {
+          if option.value == selection {
+            Label(option.title, systemImage: "checkmark")
+          } else {
+            Text(option.title)
+          }
+        }
+      }
+    } label: {
+      HStack(spacing: 10) {
+        Text(title).font(.system(size: 10, weight: .medium)).foregroundStyle(StrukturTheme.muted)
+        Spacer(minLength: 12)
+        Text(selectedTitle).font(.system(size: 12, weight: .medium)).foregroundStyle(StrukturTheme.ink)
+          .lineLimit(1)
+        Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold))
+          .foregroundStyle(StrukturTheme.muted)
+      }
+      .padding(.horizontal, 12).padding(.vertical, 10)
+      .background(StrukturTheme.editingSurface.opacity(0.48), in: RoundedRectangle(cornerRadius: 10))
+      .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(StrukturTheme.hairline) }
+      .contentShape(RoundedRectangle(cornerRadius: 10))
+      .accessibilityElement(children: .ignore)
+    }
+    .buttonStyle(.plain)
+    .menuIndicator(.hidden)
+    .accessibilityLabel(title)
+    .accessibilityValue(selectedTitle)
+  }
+
+  private var selectedTitle: String {
+    options.first(where: { $0.value == selection })?.title ?? "Choose…"
+  }
+}
+
 /// Flat, keyboard-accessible choices shared by calendar modes, filters, and editors.
 struct StrukturOptions<Value: Hashable>: View {
   let label: String

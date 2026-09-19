@@ -78,6 +78,22 @@ final class ControlLayoutTests: XCTestCase {
         minimumDate: nil, calendar: calendar), date(2028, 2, 29, 17, 45))
   }
 
+  func testCompactDateTextDoesNotPadSingleDigitComponentsWithSpaces() {
+    let locale = Locale(identifier: "de_CH")
+    XCTAssertEqual(
+      DateFieldValue.displayText(
+        for: date(2026, 9, 19), includesTime: false, calendar: calendar, locale: locale),
+      "19.9.2026")
+    XCTAssertEqual(
+      DateFieldValue.displayText(
+        for: date(2026, 12, 18), includesTime: false, calendar: calendar, locale: locale),
+      "18.12.2026")
+    XCTAssertEqual(
+      DateFieldValue.displayText(
+        for: date(2026, 9, 19, 9, 5), includesTime: true, calendar: calendar, locale: locale),
+      "19.9.2026, 09:05")
+  }
+
   func testCalendarGridRespectsWeekStartAndLeapYears() {
     var calendar = calendar
     for firstWeekday in [1, 2] {
@@ -130,18 +146,26 @@ final class ControlLayoutTests: XCTestCase {
     XCTAssertEqual(DateFieldValue.clamped(later, minimumDate: nil), later)
   }
 
-  func testNativeDateEditsUpdateTheBindingAndRejectEarlierValues() {
-    var selected = date(2026, 9, 17, 9)
-    let binding = Binding(get: { selected }, set: { selected = $0 })
-    let coordinator = NativeDateInput.Coordinator(selection: binding)
-    let picker = NSDatePicker()
-    picker.dateValue = date(2026, 9, 20, 17, 45)
-    coordinator.changed(picker)
-    XCTAssertEqual(selected, picker.dateValue)
-    coordinator.minimumDate = date(2026, 9, 18, 10)
-    picker.dateValue = date(2026, 9, 16)
-    coordinator.changed(picker)
-    XCTAssertEqual(selected, coordinator.minimumDate)
-    XCTAssertEqual(picker.dateValue, selected)
+  func testPopoverTimeEditingParsesAdjustsAndRejectsEarlierValues() {
+    let locale = Locale(identifier: "de_CH")
+    XCTAssertEqual(
+      DateFieldValue.applyingTime(
+        "17:45", to: date(2026, 9, 20, 9), minimumDate: nil,
+        calendar: calendar, locale: locale),
+      date(2026, 9, 20, 17, 45))
+    XCTAssertNil(
+      DateFieldValue.applyingTime(
+        "not a time", to: date(2026, 9, 20, 9), minimumDate: nil,
+        calendar: calendar, locale: locale))
+    XCTAssertEqual(
+      DateFieldValue.adjustingTime(
+        date(2026, 9, 20, 17, 45), byMinutes: 15, minimumDate: nil, calendar: calendar),
+      date(2026, 9, 20, 18))
+    let minimum = date(2026, 9, 20, 17, 30)
+    XCTAssertEqual(
+      DateFieldValue.settingTime(
+        hour: 9, minute: 0, on: date(2026, 9, 20), minimumDate: minimum,
+        calendar: calendar),
+      minimum)
   }
 }

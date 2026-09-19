@@ -1,7 +1,6 @@
-import AppKit
 import SwiftUI
 
-/// Native date editing in the same quiet surface used by the app's other controls.
+/// A stable date trigger with all editing contained in one calendar-and-time popover.
 struct StrukturDateField: View {
   @EnvironmentObject private var store: WorkspaceStore
   let title: String
@@ -10,8 +9,11 @@ struct StrukturDateField: View {
   var displayedComponents: DatePickerComponents
   var showsLabel: Bool
   @State private var showingCalendar = false
+  @State private var isHovered = false
+  @FocusState private var isFocused: Bool
   @Environment(\.calendar) private var environmentCalendar
   @Environment(\.isEnabled) private var isEnabled
+  @Environment(\.locale) private var locale
 
   private var calendar: Calendar {
     var value = environmentCalendar
@@ -36,32 +38,60 @@ struct StrukturDateField: View {
         Text(title).font(.system(size: 10, weight: .medium)).foregroundStyle(StrukturTheme.muted)
           .fixedSize(horizontal: true, vertical: false)
       }
-      HStack(spacing: 6) {
-        NativeDateInput(
-          selection: $selection, title: title, minimumDate: minimumDate,
-          includesTime: displayedComponents.contains(.hourAndMinute), calendar: calendar)
-        Button {
-          showingCalendar = true
-        } label: {
-          Image(systemName: "calendar").font(.system(size: 12))
-            .foregroundStyle(StrukturTheme.muted).frame(width: 24, height: 20)
-            .contentShape(Rectangle())
-        }.buttonStyle(.plain)
-          .help("Choose \(title.lowercased())")
-          .accessibilityLabel("Choose \(title.lowercased())")
-          .popover(isPresented: $showingCalendar, arrowEdge: .bottom) { calendarPopover }
+      Button {
+        showingCalendar.toggle()
+      } label: {
+        HStack(spacing: 10) {
+          Text(
+            DateFieldValue.displayText(
+              for: selection, includesTime: includesTime, calendar: calendar, locale: locale)
+          )
+          .font(.system(size: 12, weight: .medium).monospacedDigit())
+          .foregroundStyle(StrukturTheme.ink).lineLimit(1)
+          Spacer(minLength: 2)
+          Image(systemName: "calendar").font(.system(size: 11, weight: .medium))
+            .foregroundStyle(showingCalendar ? StrukturTheme.ink : StrukturTheme.muted)
+        }
+        .frame(minWidth: includesTime ? 142 : 112, minHeight: 20, alignment: .leading)
+        .padding(.horizontal, 11).padding(.vertical, 7)
+        .background(
+          isHovered || showingCalendar ? StrukturTheme.editingSurface : StrukturTheme.surface,
+          in: RoundedRectangle(cornerRadius: 9)
+        )
+        .overlay {
+          RoundedRectangle(cornerRadius: 9).strokeBorder(
+            isFocused || showingCalendar ? StrukturTheme.ink.opacity(0.24) : StrukturTheme.hairline)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 9))
       }
-      .padding(.horizontal, 10).padding(.vertical, 7)
-      .background(StrukturTheme.surface, in: RoundedRectangle(cornerRadius: 9))
-      .overlay { RoundedRectangle(cornerRadius: 9).strokeBorder(StrukturTheme.hairline) }
+      .buttonStyle(.plain)
+      .focusable().focusEffectDisabled().focused($isFocused)
+      .onHover { isHovered = $0 }
       .opacity(isEnabled ? 1 : 0.45)
+      .help("Choose \(title.lowercased())")
+      .accessibilityLabel(title)
+      .accessibilityValue(
+        DateFieldValue.displayText(
+          for: selection, includesTime: includesTime, calendar: calendar, locale: locale)
+      )
+      .accessibilityHint(includesTime ? "Opens a calendar and time editor" : "Opens a calendar")
+      .popover(isPresented: $showingCalendar, arrowEdge: .bottom) { calendarPopover }
     }.fixedSize()
   }
 
   private var calendarPopover: some View {
     VStack(alignment: .leading, spacing: 14) {
-      Text(title).font(.system(size: 10, weight: .medium)).foregroundStyle(StrukturTheme.muted)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title).font(.system(size: 10, weight: .semibold)).foregroundStyle(StrukturTheme.muted)
+        Text(selection, format: .dateTime.weekday(.wide).day().month(.wide).year())
+          .font(.strukturSerif(17, weight: .semibold)).foregroundStyle(StrukturTheme.ink)
+      }
       DateSelectionCalendar(selection: $selection, minimumDate: minimumDate, calendar: calendar)
+      if includesTime {
+        Divider()
+        TimeSelectionControl(
+          selection: $selection, minimumDate: minimumDate, calendar: calendar)
+      }
       HStack {
         Button("Today") {
           selection = DateFieldValue.selecting(
@@ -77,6 +107,8 @@ struct StrukturDateField: View {
       }
     }.padding(18).frame(width: 300).background(StrukturTheme.surface)
   }
+
+  private var includesTime: Bool { displayedComponents.contains(.hourAndMinute) }
 }
 
 /// The same open calendar styling as the sidebar, with larger hit targets and full date labels.
@@ -171,65 +203,128 @@ struct DateSelectionCalendar: View {
   }
 }
 
-struct NativeDateInput: NSViewRepresentable {
+struct TimeSelectionControl: View {
   @Binding var selection: Date
-  var title: String
   var minimumDate: Date?
-  var includesTime: Bool
   var calendar: Calendar
-  @Environment(\.isEnabled) private var isEnabled
   @Environment(\.locale) private var locale
+  @State private var draft = ""
+  @FocusState private var editingTime: Bool
 
-  func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
-
-  func makeNSView(context: Context) -> NSDatePicker {
-    let picker = NSDatePicker()
-    picker.datePickerStyle = .textField
-    picker.isBezeled = false
-    picker.isBordered = false
-    picker.drawsBackground = false
-    picker.font = .systemFont(ofSize: 12)
-    picker.textColor = NSColor(StrukturTheme.ink)
-    picker.datePickerMode = .single
-    picker.presentsCalendarOverlay = false
-    picker.target = context.coordinator
-    picker.action = #selector(Coordinator.changed(_:))
-    picker.setContentHuggingPriority(.required, for: .horizontal)
-    picker.setContentCompressionResistancePriority(.required, for: .horizontal)
-    return picker
-  }
-
-  func updateNSView(_ picker: NSDatePicker, context: Context) {
-    context.coordinator.selection = $selection
-    context.coordinator.minimumDate = minimumDate
-    picker.datePickerElements = includesTime ? [.yearMonthDay, .hourMinute] : .yearMonthDay
-    picker.calendar = calendar
-    picker.timeZone = calendar.timeZone
-    picker.locale = locale
-    picker.minDate = minimumDate
-    picker.isEnabled = isEnabled
-    picker.setAccessibilityLabel(title)
-    if picker.dateValue != selection { picker.dateValue = selection }
-  }
-
-  func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSDatePicker, context: Context) -> CGSize?
-  {
-    CGSize(width: max(100, nsView.intrinsicContentSize.width), height: 20)
-  }
-
-  @MainActor final class Coordinator: NSObject {
-    var selection: Binding<Date>
-    var minimumDate: Date?
-    init(selection: Binding<Date>) { self.selection = selection }
-    @objc func changed(_ sender: NSDatePicker) {
-      let value = DateFieldValue.clamped(sender.dateValue, minimumDate: minimumDate)
-      if value != sender.dateValue { sender.dateValue = value }
-      selection.wrappedValue = value
+  var body: some View {
+    HStack(spacing: 8) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Time").font(.system(size: 10, weight: .semibold)).foregroundStyle(
+          StrukturTheme.muted)
+        Text("15-minute steps").font(.system(size: 9)).foregroundStyle(
+          StrukturTheme.muted)
+      }
+      Spacer(minLength: 8)
+      timeButton("minus", label: "15 minutes earlier", minutes: -15)
+      TextField("Time", text: $draft)
+        .multilineTextAlignment(.center).font(.system(size: 12, weight: .medium).monospacedDigit())
+        .strukturInput(compact: true).frame(width: 88).focused($editingTime)
+        .accessibilityLabel("Time")
+        .onSubmit { commitDraft() }
+      timeButton("plus", label: "15 minutes later", minutes: 15)
     }
+    .onAppear { synchronizeDraft() }
+    .onChange(of: selection) { _, _ in if !editingTime { synchronizeDraft() } }
+    .onChange(of: editingTime) { _, editing in if !editing { commitDraft() } }
+  }
+
+  private func timeButton(_ icon: String, label: String, minutes: Int) -> some View {
+    Button {
+      selection = DateFieldValue.adjustingTime(
+        selection, byMinutes: minutes, minimumDate: minimumDate, calendar: calendar)
+      synchronizeDraft()
+    } label: {
+      Image(systemName: icon).font(.system(size: 10, weight: .semibold)).frame(width: 25, height: 25)
+        .background(StrukturTheme.editingSurface, in: RoundedRectangle(cornerRadius: 7))
+        .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(StrukturTheme.hairline) }
+    }
+    .buttonStyle(.plain).accessibilityLabel(label)
+  }
+
+  private func synchronizeDraft() {
+    draft = DateFieldValue.timeText(for: selection, calendar: calendar, locale: locale)
+  }
+
+  private func commitDraft() {
+    guard
+      let value = DateFieldValue.applyingTime(
+        draft, to: selection, minimumDate: minimumDate, calendar: calendar, locale: locale)
+    else {
+      synchronizeDraft()
+      return
+    }
+    selection = value
+    synchronizeDraft()
   }
 }
 
 enum DateFieldValue {
+  static func displayText(
+    for date: Date, includesTime: Bool, calendar: Calendar, locale: Locale
+  ) -> String {
+    let formatter = DateFormatter()
+    formatter.calendar = calendar
+    formatter.timeZone = calendar.timeZone
+    formatter.locale = locale
+    formatter.dateFormat = DateFormatter.dateFormat(
+      fromTemplate: includesTime ? "yMdjm" : "yMd", options: 0, locale: locale)
+    return formatter.string(from: date)
+  }
+
+  static func timeText(for date: Date, calendar: Calendar, locale: Locale) -> String {
+    let formatter = DateFormatter()
+    formatter.calendar = calendar
+    formatter.timeZone = calendar.timeZone
+    formatter.locale = locale
+    formatter.dateStyle = .none
+    formatter.timeStyle = .short
+    return formatter.string(from: date)
+  }
+
+  static func applyingTime(
+    _ text: String, to date: Date, minimumDate: Date?, calendar: Calendar, locale: Locale
+  ) -> Date? {
+    let formatter = DateFormatter()
+    formatter.calendar = calendar
+    formatter.timeZone = calendar.timeZone
+    formatter.locale = locale
+    formatter.dateStyle = .none
+    formatter.timeStyle = .short
+    formatter.isLenient = false
+    formatter.defaultDate = calendar.startOfDay(for: date)
+    guard let parsed = formatter.date(from: text) else { return nil }
+    let time = calendar.dateComponents([.hour, .minute], from: parsed)
+    return settingTime(
+      hour: time.hour ?? 0, minute: time.minute ?? 0, on: date,
+      minimumDate: minimumDate, calendar: calendar)
+  }
+
+  static func settingTime(
+    hour: Int, minute: Int, on date: Date, minimumDate: Date?, calendar: Calendar
+  ) -> Date {
+    guard (0...23).contains(hour), (0...59).contains(minute) else {
+      return clamped(date, minimumDate: minimumDate)
+    }
+    let value =
+      calendar.date(
+        bySettingHour: hour, minute: minute, second: 0, of: date,
+        matchingPolicy: .nextTime, repeatedTimePolicy: .first) ?? date
+    return clamped(value, minimumDate: minimumDate)
+  }
+
+  static func adjustingTime(
+    _ date: Date, byMinutes minutes: Int, minimumDate: Date?, calendar: Calendar
+  ) -> Date {
+    clamped(
+      calendar.date(byAdding: .minute, value: minutes, to: date) ?? date,
+      minimumDate: minimumDate)
+  }
+
   static func monthDays(_ month: Date, calendar: Calendar) -> [Date?] {
     guard let start = calendar.dateInterval(of: .month, for: month)?.start,
       let range = calendar.range(of: .day, in: .month, for: month)

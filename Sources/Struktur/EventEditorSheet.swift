@@ -33,9 +33,11 @@ struct EventEditorSheet: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
           if original?.seriesID != nil {
-            Picker("Apply changes to", selection: $scope) {
-              ForEach(CalendarEditScope.allCases) { Text($0.title).tag($0) }
-            }
+            StrukturMenuPicker(
+              title: "Apply changes to", selection: $scope,
+              options: CalendarEditScope.allCases.map {
+                StrukturMenuOption(value: $0, title: $0.title)
+              })
             Text(
               "Choose the scope before editing. Series changes keep individually edited exceptions."
             )
@@ -44,19 +46,19 @@ struct EventEditorSheet: View {
           TextField("What is happening?", text: $draft.title)
             .font(.strukturSerif(26, weight: .medium)).textFieldStyle(.plain)
           HStack(spacing: 12) {
-            LabeledPicker(title: "Project") {
-              Picker("Project", selection: $draft.projectID) {
-                Text("None").tag(UUID?.none)
-                ForEach(store.projects) { Text($0.name).tag(Optional($0.id)) }
-              }.labelsHidden()
-            }
-            LabeledPicker(title: "Label") {
-              Picker("Label", selection: $draft.kind) {
-                ForEach(ItemKind.allCases) { Label($0.title, systemImage: $0.icon).tag($0) }
-              }.labelsHidden()
-            }
+            StrukturMenuPicker(
+              title: "Project", selection: $draft.projectID,
+              options: [StrukturMenuOption(value: UUID?.none, title: "None")]
+                + store.projects.map {
+                  StrukturMenuOption(value: Optional($0.id), title: $0.name)
+                })
+            StrukturMenuPicker(
+              title: "Label", selection: $draft.kind,
+              options: ItemKind.allCases.map {
+                StrukturMenuOption(value: $0, title: $0.title)
+              })
           }
-          Toggle("All-day", isOn: $draft.isAllDay)
+          StrukturToggleRow("All-day", isOn: $draft.isAllDay)
           HStack(alignment: .bottom, spacing: 18) {
             StrukturDateField(
               "Starts", selection: $draft.start,
@@ -71,7 +73,7 @@ struct EventEditorSheet: View {
             Label("Part of a repeating series", systemImage: "repeat").font(.caption)
               .foregroundStyle(StrukturTheme.muted)
           }
-          TextField("Location or link", text: $draft.location)
+          TextField("Location or link", text: $draft.location).strukturInput()
           MarkdownComposer(text: $draft.notes, showingPreview: $showingPreview)
           if !isNew {
             let linked = store.tasks.filter { $0.linkedEventID == draft.id }
@@ -184,59 +186,69 @@ struct RecurrenceControls: View {
   }
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Toggle("Repeat this block", isOn: enabled)
+      StrukturToggleRow("Repeat this block", isOn: enabled)
       if let current = rule {
-        HStack {
-          Picker("Repeats", selection: field(\.frequency)) {
-            ForEach(RepeatFrequency.allCases) { Text($0.title).tag($0) }
-          }
-          Stepper("Every \(current.interval)", value: field(\.interval), in: 1...52)
+        HStack(spacing: 10) {
+          StrukturMenuPicker(
+            title: "Repeats", selection: field(\.frequency),
+            options: RepeatFrequency.allCases.map {
+              StrukturMenuOption(value: $0, title: $0.title)
+            })
+          StrukturValueStepper(
+            title: "Interval", value: field(\.interval), range: 1...52,
+            valueText: { "Every \($0)" })
         }
         if current.frequency == .weekly {
-          HStack {
+          HStack(spacing: 5) {
             ForEach([2, 3, 4, 5, 6, 7, 1], id: \.self) { weekday in
               let selected =
                 current.weekdays.isEmpty
                 ? current.calendar.component(.weekday, from: start) == weekday
                 : current.weekdays.contains(weekday)
-              Toggle(
-                current.calendar.shortWeekdaySymbols[weekday - 1],
-                isOn: Binding(
-                  get: { selected },
-                  set: { value in
-                    var days = Set(
-                      current.weekdays.isEmpty
-                        ? [current.calendar.component(.weekday, from: start)] : current.weekdays)
-                    if value { days.insert(weekday) } else { days.remove(weekday) }
-                    if !days.isEmpty { rule?.weekdays = days.sorted() }
-                  })
-              ).toggleStyle(.button)
+              Button {
+                var days = Set(
+                  current.weekdays.isEmpty
+                    ? [current.calendar.component(.weekday, from: start)] : current.weekdays)
+                if selected { days.remove(weekday) } else { days.insert(weekday) }
+                if !days.isEmpty { rule?.weekdays = days.sorted() }
+              } label: {
+                Text(current.calendar.shortWeekdaySymbols[weekday - 1])
+                  .font(.system(size: 10, weight: .medium)).frame(maxWidth: .infinity)
+                  .padding(.vertical, 7)
+                  .foregroundStyle(selected ? StrukturTheme.ink : StrukturTheme.muted)
+                  .background(
+                    selected ? StrukturTheme.surface : .clear,
+                    in: RoundedRectangle(cornerRadius: 7))
+                  .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(StrukturTheme.hairline) }
+              }
+              .buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
             }
           }
         }
-        Picker(
-          "Ends",
+        StrukturMenuPicker(
+          title: "Ends",
           selection: Binding(
             get: { current.count != nil ? "count" : (current.until != nil ? "date" : "never") },
             set: { value in
               rule?.count = value == "count" ? 12 : nil
               rule?.until = value == "date" ? start.adding(days: 90) : nil
-            })
-        ) {
-          Text("Never").tag("never")
-          Text("On date").tag("date")
-          Text("After occurrences").tag("count")
-        }
+            }),
+          options: [
+            StrukturMenuOption(value: "never", title: "Never"),
+            StrukturMenuOption(value: "date", title: "On date"),
+            StrukturMenuOption(value: "count", title: "After occurrences"),
+          ])
         if current.until != nil {
           StrukturDateField(
             "Last day",
             selection: Binding(get: { rule?.until ?? start }, set: { rule?.until = $0 }),
             minimumDate: start.startOfDay, displayedComponents: .date)
         }
-        if let count = current.count {
-          Stepper(
-            "\(count) occurrences",
-            value: Binding(get: { rule?.count ?? 12 }, set: { rule?.count = $0 }), in: 1...1000)
+        if current.count != nil {
+          StrukturValueStepper(
+            title: "Occurrences",
+            value: Binding(get: { rule?.count ?? 12 }, set: { rule?.count = $0 }),
+            range: 1...1000, valueText: { "\($0) total" })
         }
         Text(
           "Keeps local time in \(current.timeZoneIdentifier), including daylight-saving changes."

@@ -175,19 +175,29 @@ struct GoalEditorSheet: View {
         VStack(alignment: .leading, spacing: 18) {
           TextField("What are you working toward?", text: $draft.title)
             .font(.strukturSerif(25)).textFieldStyle(.plain)
-          TextField("Description", text: $draft.detail, axis: .vertical)
-          HStack {
-            Picker("Period", selection: $draft.period) {
-              ForEach(GoalPeriod.allCases) { Text($0.title).tag($0) }
-            }
-            Picker("Measure", selection: $draft.metric) {
-              ForEach(GoalMetric.allCases) { Text($0.title).tag($0) }
-            }
+          TextField("Description", text: $draft.detail, axis: .vertical).strukturInput()
+          HStack(spacing: 12) {
+            StrukturMenuPicker(
+              title: "Period", selection: $draft.period,
+              options: GoalPeriod.allCases.map {
+                StrukturMenuOption(value: $0, title: $0.title)
+              })
+            StrukturMenuPicker(
+              title: "Measure", selection: $draft.metric,
+              options: GoalMetric.allCases.map {
+                StrukturMenuOption(value: $0, title: $0.title)
+              })
           }
           HStack {
             Text("Target").font(.callout)
-            TextField("Goal target", value: $draft.target, format: .number).frame(width: 90)
-            Stepper("Adjust target", value: $draft.target, in: 1...100_000).labelsHidden()
+            TextField("Goal target", value: $draft.target, format: .number)
+              .multilineTextAlignment(.center).strukturInput(compact: true).frame(width: 90)
+            IconButton(icon: "minus", label: "Decrease target") {
+              draft.target = max(1, draft.target - 1)
+            }
+            IconButton(icon: "plus", label: "Increase target") {
+              draft.target = min(100_000, draft.target + 1)
+            }
             Text(draft.metric == .completedTasks ? "tasks" : "minutes").font(.caption)
               .foregroundStyle(StrukturTheme.muted)
             Spacer()
@@ -200,16 +210,19 @@ struct GoalEditorSheet: View {
           .font(.caption).foregroundStyle(StrukturTheme.muted)
           HStack {
             TextField("Paste a task/space UID or struktur:// link", text: $reference)
-            Button("Link") { addReference() }.disabled(
-              reference.trimmingCharacters(in: .whitespaces).isEmpty)
+              .strukturInput()
+            Button("Link") { addReference() }.buttonStyle(StrukturButtonStyle(compact: true))
+              .disabled(reference.trimmingCharacters(in: .whitespaces).isEmpty)
           }
           if let referenceError { Text(referenceError).font(.caption).foregroundStyle(.red) }
           ForEach(store.projects) { project in
-            Toggle(isOn: membership(project.id, in: \.projectIDs)) {
+            StrukturToggleRow(
+              isOn: membership(project.id, in: \.projectIDs), accessibilityTitle: project.name
+            ) {
               Label(project.name, systemImage: project.symbol.icon)
             }
           }
-          TextField("Filter tasks", text: $query).textFieldStyle(.roundedBorder)
+          TextField("Filter tasks", text: $query).strukturInput()
           LazyVStack(alignment: .leading, spacing: 9) {
             ForEach(
               store.tasks.filter {
@@ -217,7 +230,9 @@ struct GoalEditorSheet: View {
                   || $0.id.uuidString.localizedCaseInsensitiveContains(query)
               }
             ) { task in
-              Toggle(isOn: membership(task.id, in: \.taskIDs)) {
+              StrukturToggleRow(
+                isOn: membership(task.id, in: \.taskIDs), accessibilityTitle: "Track \(task.title)"
+              ) {
                 VStack(alignment: .leading, spacing: 2) {
                   Text(task.title).fixedSize(horizontal: false, vertical: true)
                   Text(
@@ -226,7 +241,7 @@ struct GoalEditorSheet: View {
                   )
                   .font(.caption2).foregroundStyle(StrukturTheme.muted)
                 }
-              }.accessibilityLabel("Track \(task.title)")
+              }
             }
           }
           Text("\(draft.taskIDs.count) task references · \(draft.projectIDs.count) spaces")
@@ -243,9 +258,11 @@ struct GoalEditorSheet: View {
               }.buttonStyle(.plain).accessibilityLabel("Use \(symbol.title) symbol")
             }
             Spacer()
-            Picker("Color", selection: $draft.color) {
-              ForEach(AccentToken.allCases) { Text($0.name).tag($0) }
-            }.frame(width: 160)
+            StrukturMenuPicker(
+              title: "Color", selection: $draft.color,
+              options: AccentToken.allCases.map {
+                StrukturMenuOption(value: $0, title: $0.name)
+              }).frame(width: 190)
           }
           if !isNew {
             GoalProgressCard(goal: draft, date: Date())

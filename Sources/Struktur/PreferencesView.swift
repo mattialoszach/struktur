@@ -22,10 +22,35 @@ struct PreferencesView: View {
 
   var body: some View {
     HStack(spacing: 0) {
-      List(PreferencesSection.allCases, selection: $section) { item in
-        Label(item.title, systemImage: item.icon).tag(item)
+      VStack(spacing: 4) {
+        ForEach(PreferencesSection.allCases) { item in
+          Button {
+            section = item
+          } label: {
+            HStack(spacing: 10) {
+              Image(systemName: item.icon).font(.system(size: 12, weight: .medium)).frame(width: 18)
+              Text(item.title).font(.system(size: 12, weight: .medium))
+              Spacer()
+            }
+            .foregroundStyle(section == item ? StrukturTheme.ink : StrukturTheme.muted)
+            .padding(.horizontal, 11).padding(.vertical, 9)
+            .background(
+              section == item ? StrukturTheme.surface : .clear,
+              in: RoundedRectangle(cornerRadius: 9)
+            )
+            .overlay {
+              if section == item {
+                RoundedRectangle(cornerRadius: 9).strokeBorder(StrukturTheme.hairline)
+              }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 9))
+          }
+          .buttonStyle(.plain)
+          .accessibilityAddTraits(section == item ? .isSelected : [])
+        }
+        Spacer()
       }
-      .listStyle(.sidebar).frame(width: 180)
+      .padding(12).frame(width: 180).background(StrukturTheme.sidebar)
       Divider()
       VStack(alignment: .leading, spacing: 0) {
         Text(section.title).font(.strukturSerif(27, weight: .semibold)).padding(24)
@@ -39,6 +64,7 @@ struct PreferencesView: View {
           case .apple: AppleIntegrationPreferences()
           }
         }
+        .buttonStyle(StrukturButtonStyle())
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       }
     }
@@ -76,7 +102,7 @@ struct GeneralPreferences: View {
               get: { store.preferences.displayName },
               set: { value in store.updatePreferences { $0.displayName = value } })
           )
-          .textFieldStyle(.roundedBorder)
+          .strukturInput()
         }
         PreferenceGroup(
           title: "Appearance", detail: "Follow macOS or keep Struktur in your preferred theme."
@@ -108,7 +134,6 @@ struct GeneralPreferences: View {
                 store.replaceWorkspace(workspace)
               }
               Button("Start empty", role: .destructive) { confirmEmpty = true }
-                .buttonStyle(StrukturButtonStyle())
             }
           }
         }
@@ -162,14 +187,16 @@ struct CalendarPreferences: View {
         PreferenceGroup(
           title: "Working window", detail: "Keep the timetable focused on the hours you use."
         ) {
-          HStack {
-            Stepper(
-              "Starts at \(store.preferences.workingDayStart):00", value: startHour, in: 0...22)
-            Spacer()
-            Stepper("Ends at \(store.preferences.workingDayEnd):00", value: endHour, in: 2...24)
+          HStack(spacing: 10) {
+            StrukturValueStepper(
+              title: "Day starts", value: startHour, range: 0...22,
+              valueText: { String(format: "%02d:00", $0) })
+            StrukturValueStepper(
+              title: "Day ends", value: endHour, range: 2...24,
+              valueText: { String(format: "%02d:00", $0) })
           }
-          Toggle("Show weekends", isOn: showWeekends)
-          Toggle("Start weeks on Monday", isOn: weekStartsMonday)
+          StrukturToggleRow("Show weekends", isOn: showWeekends)
+          StrukturToggleRow("Start weeks on Monday", isOn: weekStartsMonday)
         }
       }.padding(24)
     }
@@ -217,9 +244,8 @@ struct DashboardPreferences: View {
             Button("Browse widgets") { showingLibrary = true }
             Button("Restore starter layout") { resetLayout = true }
           }
-          Toggle(
-            "Show completed tasks in the tasks widget",
-            isOn: Binding(
+          StrukturToggleRow(
+            "Show completed tasks in the tasks widget", isOn: Binding(
               get: { store.preferences.showCompletedTasks },
               set: { value in store.updatePreferences { $0.showCompletedTasks = value } }))
         }
@@ -228,7 +254,9 @@ struct DashboardPreferences: View {
           detail: "Turn dashboard widgets on or off. Reorder them in Customize on the overview."
         ) {
           ForEach(DashboardWidgetKind.allCases) { kind in
-            Toggle(isOn: enabled(kind)) { Label(kind.title, systemImage: kind.icon) }
+            StrukturToggleRow(isOn: enabled(kind), accessibilityTitle: kind.title) {
+              Label(kind.title, systemImage: kind.icon)
+            }
           }
         }
       }.padding(24)
@@ -286,10 +314,12 @@ struct DataPreferences: View {
           title: "Import and export",
           detail: "Export every task, project, event, preference, and note as readable JSON."
         ) {
-          Picker("Export", selection: $exportProjectID) {
-            Text("Entire workspace").tag(UUID?.none)
-            ForEach(store.projects) { Text("Space: " + $0.name).tag(Optional($0.id)) }
-          }
+          StrukturMenuPicker(
+            title: "Export", selection: $exportProjectID,
+            options: [StrukturMenuOption(value: UUID?.none, title: "Entire workspace")]
+              + store.projects.map {
+                StrukturMenuOption(value: Optional($0.id), title: "Space: " + $0.name)
+              })
           HStack {
             Button("Export workspace") {
               do {

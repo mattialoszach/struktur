@@ -244,8 +244,7 @@ struct NoteLinkPicker: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       Text("Link to your workspace").font(.strukturSerif(25))
-      TextField("Search notes, tasks, events, spaces, and goals", text: $query).textFieldStyle(
-        .roundedBorder)
+      TextField("Search notes, tasks, events, spaces, and goals", text: $query).strukturInput()
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 6) {
           ForEach(items) { item in

@@ -92,11 +92,13 @@ struct AppleIntegrationPreferences: View {
           detail:
             "Export new items to your default calendar and reminder list. Repeating calendar blocks are exported as individual occurrences within the dates you choose."
         ) {
-          Picker("Export scope", selection: $projectID) {
-            Text("All spaces").tag(UUID?.none)
-            ForEach(store.projects) { Text($0.name).tag(Optional($0.id)) }
-          }
-          Toggle("Calendar blocks", isOn: $includeEvents)
+          StrukturMenuPicker(
+            title: "Export scope", selection: $projectID,
+            options: [StrukturMenuOption(value: UUID?.none, title: "All spaces")]
+              + store.projects.map {
+                StrukturMenuOption(value: Optional($0.id), title: $0.name)
+              })
+          StrukturToggleRow("Calendar blocks", isOn: $includeEvents)
           if includeEvents {
             HStack(alignment: .bottom, spacing: 18) {
               StrukturDateField("From", selection: $exportStart, displayedComponents: .date)
@@ -109,7 +111,7 @@ struct AppleIntegrationPreferences: View {
             )
             .font(.caption).foregroundStyle(StrukturTheme.muted)
           }
-          Toggle("Open tasks as reminders", isOn: $includeTasks)
+          StrukturToggleRow("Open tasks as reminders", isOn: $includeTasks)
           HStack {
             Button("Export now") {
               Task {

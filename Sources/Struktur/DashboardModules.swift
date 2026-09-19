@@ -376,13 +376,12 @@ struct FocusWidget: View {
         }
         if expanded {
           if session == nil {
-            VStack(alignment: .leading, spacing: 8) {
-              Text("Task (optional)").font(.caption).foregroundStyle(StrukturTheme.muted)
-              Picker("Focus on", selection: $taskID) {
-                Text("No linked task").tag(UUID?.none)
-                ForEach(store.tasks.filter { !$0.isCompleted }) { Text($0.title).tag(Optional($0.id)) }
-              }.labelsHidden().frame(maxWidth: .infinity)
-            }
+            StrukturMenuPicker(
+              title: "Task (optional)", selection: $taskID,
+              options: [StrukturMenuOption(value: UUID?.none, title: "No linked task")]
+                + store.tasks.filter { !$0.isCompleted }.map {
+                  StrukturMenuOption(value: Optional($0.id), title: $0.title)
+                })
           } else {
             if let task = store.tasks.first(where: { $0.id == session?.taskID }) {
               Label(task.title, systemImage: "checkmark.circle")

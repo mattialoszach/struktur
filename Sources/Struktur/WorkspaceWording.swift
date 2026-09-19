@@ -126,7 +126,7 @@ private struct WordingEditor: View {
     VStack(alignment: .leading, spacing: 14) {
       Text("Edit wording").font(.strukturSerif(20))
       TextField("Wording", text: $draft)
-        .textFieldStyle(.roundedBorder)
+        .strukturInput()
         .focused($focused)
         .onSubmit { save() }
       Text(

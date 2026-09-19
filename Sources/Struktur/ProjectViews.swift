@@ -255,15 +255,14 @@ struct ProjectEditorSheet: View {
             TextField("A name for this space", text: $draft.name).font(.strukturSerif(27))
               .textFieldStyle(.plain)
           }.padding(.vertical, 8)
-          TextField("Description", text: $draft.detail, axis: .vertical).textFieldStyle(
-            .roundedBorder)
+          TextField("Description", text: $draft.detail, axis: .vertical).strukturInput()
           VStack(alignment: .leading, spacing: 7) {
             Eyebrow(text: "Goal")
             TextField("What are you working toward?", text: $draft.goal, axis: .vertical)
-              .textFieldStyle(.roundedBorder)
+              .strukturInput()
           }
           HStack {
-            Toggle("Give it a target date", isOn: $hasTarget)
+            StrukturToggleRow("Give it a target date", isOn: $hasTarget)
             Spacer()
             if hasTarget {
               StrukturDateField(
@@ -302,7 +301,7 @@ struct ProjectEditorSheet: View {
               }.buttonStyle(.plain).help(color.name).accessibilityLabel(color.name)
             }
           }
-          if !isNew { Toggle("Archive this space", isOn: $draft.isArchived).font(.caption) }
+          if !isNew { StrukturToggleRow("Archive this space", isOn: $draft.isArchived) }
         }.padding(26)
       }
       Divider()

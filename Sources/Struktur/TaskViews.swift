@@ -280,25 +280,25 @@ struct TaskEditorSheet: View {
           TextField("What needs doing?", text: $draft.title)
             .font(.strukturSerif(26, weight: .medium)).textFieldStyle(.plain)
           HStack(spacing: 12) {
-            LabeledPicker(title: "Project") {
-              Picker("Project", selection: $draft.projectID) {
-                Text("None").tag(UUID?.none)
-                ForEach(store.projects) { Text($0.name).tag(Optional($0.id)) }
-              }.labelsHidden()
-            }
-            LabeledPicker(title: "Priority") {
-              Picker("Priority", selection: $draft.priority) {
-                ForEach(TaskPriority.allCases) { Text($0.title).tag($0) }
-              }.labelsHidden()
-            }
-            LabeledPicker(title: "Rhythm") {
-              Picker("Rhythm", selection: $draft.cadence) {
-                ForEach(TaskCadence.allCases) { Text($0.title).tag($0) }
-              }.labelsHidden()
-            }
+            StrukturMenuPicker(
+              title: "Project", selection: $draft.projectID,
+              options: [StrukturMenuOption(value: UUID?.none, title: "None")]
+                + store.projects.map {
+                  StrukturMenuOption(value: Optional($0.id), title: $0.name)
+                })
+            StrukturMenuPicker(
+              title: "Priority", selection: $draft.priority,
+              options: TaskPriority.allCases.map {
+                StrukturMenuOption(value: $0, title: $0.title)
+              })
+            StrukturMenuPicker(
+              title: "Rhythm", selection: $draft.cadence,
+              options: TaskCadence.allCases.map {
+                StrukturMenuOption(value: $0, title: $0.title)
+              })
           }
           HStack(spacing: 16) {
-            Toggle("Deadline", isOn: $hasDueDate)
+            StrukturToggleRow("Deadline", isOn: $hasDueDate)
             if hasDueDate {
               StrukturDateField(
                 "Deadline",
@@ -307,11 +307,12 @@ struct TaskEditorSheet: View {
               )
             }
             Spacer()
-            Stepper(
-              "\(draft.estimateMinutes) min", value: $draft.estimateMinutes, in: 5...480, step: 5)
+            StrukturValueStepper(
+              title: "Estimate", value: $draft.estimateMinutes, range: 5...480, step: 5,
+              valueText: { "\($0) min" })
           }
           HStack(spacing: 16) {
-            Toggle("Place on calendar", isOn: $hasPlannedStart)
+            StrukturToggleRow("Place on calendar", isOn: $hasPlannedStart)
             if hasPlannedStart {
               StrukturDateField(
                 "Scheduled start",
@@ -323,15 +324,15 @@ struct TaskEditorSheet: View {
             Spacer()
           }
 
-          Picker("Related calendar block", selection: $draft.linkedEventID) {
-            Text("No linked block").tag(UUID?.none)
-            ForEach(
-              linkableEntries
-            ) {
-              Text($0.title + " · " + $0.start.formatted(.dateTime.day().month(.abbreviated))).tag(
-                Optional($0.id))
-            }
-          }
+          StrukturMenuPicker(
+            title: "Related calendar block", selection: $draft.linkedEventID,
+            options: [StrukturMenuOption(value: UUID?.none, title: "No linked block")]
+              + linkableEntries.map {
+                StrukturMenuOption(
+                  value: Optional($0.id),
+                  title: $0.title + " · "
+                    + $0.start.formatted(.dateTime.day().month(.abbreviated)))
+              })
           .onChange(of: draft.linkedEventID) { _, id in
             if let id, let entry = store.resolveEntry(id), draft.projectID == nil {
               draft.projectID = entry.projectID
