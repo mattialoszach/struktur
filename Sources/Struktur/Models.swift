@@ -219,13 +219,14 @@ struct UserPreferences: Codable, Equatable {
   var dashboardCalendarMode: CalendarViewMode? = .day
   var focusDurationMinutes: Int? = 25
   var wordingOverrides: [String: String]?
+  var assistant: AssistantPreferences?
 
   init() {}
 
   private enum CodingKeys: String, CodingKey {
     case defaultCalendarMode, taskRailPosition, appearance, weekStartsMonday, showWeekends
     case workingDayStart, workingDayEnd, showCompletedTasks, enabledWidgets, widgetLayout,
-      displayName, dashboardCalendarMode, focusDurationMinutes, wordingOverrides
+      displayName, dashboardCalendarMode, focusDurationMinutes, wordingOverrides, assistant
   }
 
   init(from decoder: Decoder) throws {
@@ -249,6 +250,7 @@ struct UserPreferences: Codable, Equatable {
       ]
     displayName = try values.decodeIfPresent(String.self, forKey: .displayName) ?? ""
     wordingOverrides = try values.decodeIfPresent([String: String].self, forKey: .wordingOverrides)
+    assistant = try values.decodeIfPresent(AssistantPreferences.self, forKey: .assistant)
     dashboardCalendarMode =
       try values.decodeIfPresent(CalendarViewMode.self, forKey: .dashboardCalendarMode) ?? .day
     focusDurationMinutes = min(

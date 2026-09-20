@@ -11,6 +11,7 @@ final class WorkspaceStore: ObservableObject {
   // Mutators publish through changed(). Publishing this large value as well
   // invalidated every workspace view for each native text-storage edit.
   private(set) var workspace: Workspace
+  private(set) var workspaceGeneration = UUID()
   @Published var lastSaveError: String?
   let saveStatus = WorkspaceSaveStatus()
   private(set) var isSavePending: Bool {
@@ -331,9 +332,59 @@ final class WorkspaceStore: ObservableObject {
   }
 
   func replaceWorkspace(_ newWorkspace: Workspace) {
+    workspaceGeneration = UUID()
     recoveryRequired = false
     migrationBackup = nil
     workspace = newWorkspace
+    changed()
+  }
+
+  /// Validate the entire assistant batch before changing any workspace data.
+  func applyAssistantActions(_ actions: [AssistantAction], generation: UUID) throws -> AssistantReceipt {
+    guard !recoveryRequired else {
+      throw AssistantFailure("Restore your workspace in Settings before adding items.")
+    }
+    guard generation == workspaceGeneration else {
+      throw AssistantFailure("The workspace changed. Start a new conversation before adding these items.")
+    }
+    guard !actions.isEmpty, actions.count <= 12,
+      Set(actions.map(\.id)).count == actions.count else {
+      throw AssistantFailure("Choose between 1 and 12 distinct items.")
+    }
+    let existing = Set(tasks.map(\.id) + entries.map(\.id))
+    for action in actions {
+      guard !existing.contains(action.id) else {
+        throw AssistantFailure("These items have already been added.")
+      }
+      try action.validate(projectIDs: Set(projects.map(\.id)))
+    }
+    let receipt = AssistantReceipt(generation: generation,
+      tasks: actions.filter { $0.kind == .task }.map(\.task),
+      events: actions.filter { $0.kind == .event }.map(\.event))
+    workspace.tasks += receipt.tasks
+    workspace.calendarEntries += receipt.events
+    changed()
+    return receipt
+  }
+
+  func undoAssistantActions(_ receipt: AssistantReceipt) throws {
+    guard !recoveryRequired, receipt.generation == workspaceGeneration,
+      receipt.tasks.allSatisfy({ item in tasks.first { $0.id == item.id } == item }),
+      receipt.events.allSatisfy({ item in entries.first { $0.id == item.id } == item })
+    else { throw AssistantFailure("These items have changed since they were added. Edit or remove them in your workspace.") }
+    let taskIDs = Set(receipt.tasks.map(\.id))
+    let eventIDs = Set(receipt.events.map(\.id))
+    let referenceStrings = (taskIDs.union(eventIDs)).map { $0.uuidString.lowercased() }
+    let noteText = (notes.map(\.markdown) + tasks.filter { !taskIDs.contains($0.id) }.map(\.notes)
+      + entries.filter { !eventIDs.contains($0.id) }.map(\.notes) + [scratchpad]).joined(separator: "\n").lowercased()
+    guard !tasks.contains(where: { $0.linkedEventID.map(eventIDs.contains) == true }),
+      !goals.contains(where: { !taskIDs.isDisjoint(with: $0.taskIDs) }),
+      workspace.focusSession?.taskID.map(taskIDs.contains) != true,
+      !(workspace.focusHistory ?? []).contains(where: { $0.taskID.map(taskIDs.contains) == true }),
+      !referenceStrings.contains(where: noteText.contains)
+    else { throw AssistantFailure("These items are now linked to other work. Remove them from their editor to manage those links.") }
+    workspace.tasks.removeAll { taskIDs.contains($0.id) }
+    workspace.calendarEntries.removeAll { eventIDs.contains($0.id) }
     changed()
   }
 
