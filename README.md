@@ -2,7 +2,7 @@
 
 A native macOS workspace for schedules, tasks, projects, and notes.
 
-Built in Swift 6 and SwiftUI for macOS 15+. No web view, account, analytics, or third-party dependencies.
+Built in Swift 6 and SwiftUI for macOS 15+. No web view, analytics, or third-party dependencies. The optional AI assistant defaults to Apple’s on-device Foundation Models, with OpenAI available by choice.
 
 ![Struktur in light mode](Documentation/preview-light.png)
 
@@ -10,7 +10,7 @@ Built in Swift 6 and SwiftUI for macOS 15+. No web view, account, analytics, or 
 
 ## Run
 
-Requires a Swift 6.2+ toolchain (Xcode 26+). Development has been verified with the installed Swift 6.4 toolchain.
+Requires a Swift 6.2+ toolchain and the macOS 26.4 SDK or later (for Foundation Models token counting). Development has been verified with the installed Swift 6.4 toolchain. The packaged app still targets macOS 15; Apple’s on-device assistant is enabled only on macOS 26 or later.
 
 ~~~sh
 swift run Struktur
@@ -24,6 +24,30 @@ open dist/Struktur.app
 ~~~
 
 The packaging script generates the icon, embeds the privacy manifest, and verifies an ad-hoc signature. Previous app builds are preserved in `dist`. Set `STRUKTUR_UNIVERSAL=1` to build both Apple Silicon and Intel slices. Public distribution requires your Apple Developer identity and approval; see [distribution instructions](Documentation/Distribution.md).
+
+## Assistant
+
+Click **♦ Ask** or press **⌘J** anywhere in the app. A compact panel stays beside your work, remembers the current conversation while you move between pages, and closes with the same shortcut or Escape. It stays closed until you ask for it. **⌘Return** sends a message; Stop cancels a request and restores your draft.
+
+**Apple · On this Mac** is the default. On macOS 26 or later, an Apple Intelligence-capable Mac with Apple Intelligence enabled and its model downloaded can summarize notes and create drafts without an API key or cloud requests. Open Ask and start typing. **Settings → Assistant → Check model** runs a short on-device check without workspace content. Availability messages distinguish an older OS, incompatible device, disabled Apple Intelligence, and a model that is still getting ready. Struktur itself still supports macOS 15; Apple AI is available only where the framework and model are ready.
+
+**OpenAI · Cloud** is optional. Select it explicitly in Settings → Assistant, save your API key, and use **Test connection**. The default cloud model is `gpt-4.1-mini`; another model must support the Responses API and structured outputs. Keys stay in macOS Keychain and are excluded from workspace files and backups. API billing is separate from ChatGPT. An unavailable or failed Apple model never sends the request to OpenAI automatically. Switching providers clears the conversation and pending proposals; your unsent message remains. Existing model IDs and keys are retained. Preferences without a provider field default to Apple.
+
+Choose the context before sending:
+
+- **Schedule & tasks:** open tasks, calendar occurrences across 14 days from the selected date, active space names, working hours, and timezone. Includes scheduled starts, durations, deadlines, and task/event relationships. Task/event notes and note-library bodies are excluded.
+- **Current note:** the selected, nondeleted note’s title and Markdown; no image bytes or other note bodies. Opening Ask from Notes selects this context for a new conversation.
+- **Message only:** your message plus date and timezone, without workspace items.
+
+The info button previews the context. Apple uses up to 10 tasks, 10 calendar occurrences, and 8 space names, reduced as needed to a 5,000-byte context; notes use up to 3,200 characters within that limit. Omitted records and note excerpts are labeled. Up to two recent conversation excerpts (700 characters each) accompany messages of up to 2,000 characters. Requests that exceed the model’s token window fail with guidance to shorten the request or change context; the message is preserved. Apple routes requests into focused answers, task drafts, or calendar drafts, with up to four proposals per request. Selected-day briefs render dates, deadlines, and scheduled work directly from the shared workspace snapshot; the model does not invent those facts. This smaller model is best for focused summaries and extraction, not complex reasoning or unrestricted knowledge questions.
+
+OpenAI context retains up to 100 tasks, 150 calendar occurrences, 100 space names, or 24,000 note characters; it receives up to eight recent conversation messages and allows up to 12 proposals. A fresh snapshot is processed only when you press Send. Changing context or provider clears the conversation to prevent earlier content from following into another scope. Conversations stay in memory; closing the panel retains them, while New conversation, switching context/provider, closing the window, or quitting clears them. OpenAI requests set `store: false`; OpenAI’s API data policies still apply. Apple requests use the on-device system model, not Private Cloud Compute.
+
+Ask for a day brief, an explanation of a note, a list of next steps, or new tasks/calendar blocks. Proposed items appear as editable cards. Review the titles, dates, spaces, priorities, optional duration estimates, notes, and locations; select the items you want and **Add to workspace**. Apple copies supporting notes and locations only when that text appears in your message, recent user messages, or the selected note. Deadline flags remain separate from scheduled start/end times, and overlaps with existing or proposed work appear before addition. **Undo addition** removes the latest batch while its items remain unchanged and unreferenced. Additions use the same atomic workspace persistence as manual editing; existing save-error/recovery protections remain active.
+
+This first integration creates nonrecurring tasks and timed calendar blocks. It does not edit/delete existing items, browse the web, inspect note images, or write directly to Apple Calendar/Reminders. Use the existing editors and manual Apple exchange for those operations. Summaries depend on the chosen context; review proposed dates and factual claims. The shortcut works while Struktur is active, not system-wide.
+
+The integrations follow Apple’s [Foundation Models guidance](https://developer.apple.com/documentation/foundationmodels/generating-content-and-performing-tasks-with-foundation-models) and [guided generation](https://developer.apple.com/documentation/foundationmodels/generating-swift-data-structures-with-guided-generation), plus OpenAI’s [structured-output documentation](https://developers.openai.com/api/docs/guides/structured-outputs). See [verification evidence](Documentation/Verification.md) for real on-device checks, simulated-provider tests, and remaining limits.
 
 ## Your workspace
 
@@ -39,7 +63,7 @@ The packaging script generates the icon, embeds the privacy manifest, and verifi
 
 The flow timeline shows actual start and end times, live countdowns, open gaps, and the final block of the day. Scheduled tasks occupy their estimated duration. A deadline is displayed as a due marker, not an invented calendar appointment.
 
-The calendar supports day, week, month, and agenda views; custom working hours; Sunday/Monday weeks; and optional weekends. Calendar modes, task filters, appearance, focus duration, and Markdown modes share flat option controls with keyboard navigation. Their selected background identifies the active choice without a blue focus outline; calendar-popover days follow the same approach. Choices reserve room for their full labels and wrap into rows when constrained. Overlapping blocks get separate lanes, and multi-day/all-day events retain their date boundaries. Double-click an open timeline slot to create a block. Drag a task from the task list onto the calendar to schedule it. Month cells offer an add-block context menu. Calendar content stays inside its widget; short month views scroll instead of compressing date rows.
+The calendar supports day, week, month, and agenda views; custom working hours; Sunday/Monday weeks; and optional weekends. Calendar modes, task filters, appearance, focus duration, and Markdown modes share flat option controls with keyboard navigation. Tasks opens to **Today**, which shows work due or scheduled today plus overdue tasks. **Upcoming** shows unfinished work due or scheduled after today, while **Open** shows every unfinished task. Their selected background identifies the active choice without a blue focus outline; calendar-popover days follow the same approach. Choices reserve room for their full labels and wrap into rows when constrained. Overlapping blocks get separate lanes, and multi-day/all-day events retain their date boundaries. Double-click an open timeline slot to create a block. Drag a task from the task list onto the calendar to schedule it. Month cells offer an add-block context menu. Calendar content stays inside its widget; short month views scroll instead of compressing date rows.
 
 Date fields use a shared rounded surface with locale-aware native text editing and a calendar popover styled like the sidebar. Choosing a day preserves the time; minimum dates are respected. The calendar follows your Sunday/Monday preference and provides month navigation and a Today shortcut.
 
@@ -69,7 +93,7 @@ The editor supports common line-based Markdown: headings, emphasis, lists, quote
 
 ## Tasks, notes, and focus
 
-Tasks support deadlines, scheduled starts, estimated durations, priorities, daily/weekly recurrence, and open-ended work. Completing a recurring task generates a future occurrence without hiding overdue work.
+Tasks support deadlines, scheduled starts, optional duration estimates, priorities, daily/weekly recurrence, and open-ended work. Unscheduled tasks can omit an estimate. Placing a task on the calendar assigns a 30-minute estimate when none exists so its end time and free-time calculations remain clear. Completing a recurring task generates a future occurrence without hiding overdue work.
 
 Markdown supports headings, inline formatting, links, lists, quotes, and interactive checkboxes. Both `- [ ] Item` and `- [] Item` render as checkboxes. Focus notes use one full-width editor with a Write/Preview switch; other note editors can show a live preview beside the editor when there is enough room. Switch to **Preview** to click checklist boxes; they update the note text and are separate from task completion. Notes in task/event editors save with **Save**, while Cancel discards the draft. Valid Struktur links in notes open item editors inside the current window; invalid references show an in-app message. The Markdown syntax example is plain text, so clicking its example link cannot launch another app instance.
 
@@ -101,6 +125,8 @@ This connection adds new items and preserves existing ones. It is **not automati
 | `⌘B` / `⌘I` | Bold / italic in the Notes Write editor |
 | `⌘K` | Search notes, tasks, events, spaces, goals, and identifiers |
 | `⌘T` | Today |
+| `⌘J` | Open / close Assistant |
+| `⌘Return` | Send an Assistant message |
 | Return / Escape | Save / cancel an editor |
 
 ## Verification
@@ -109,7 +135,13 @@ This connection adds new items and preserves existing ones. It is **not automati
 swift test
 ~~~
 
-127 tests cover workspace migration, widget persistence and packing, continuous resize spacing and bounds, stable pointer tracking and cancellation, compact month rows, full-label option sizing and wrapping, date-field bindings and minimum dates, calendar grids and daylight-saving transitions, recurring tasks and calendar series, linked goals, focus pause/resume/relaunch and early/expired finishes, schedule overlap and free-time calculation, all-day boundaries, reference validation, scoped exports, import validation/backups, Apple exchange with a fake client, Markdown checkboxes and autosave, native note typing with highlights and Unicode, marked-text composition, editor undo across autosave and Preview, stale view refreshes, native redraw of highlighted edits, full-window title/body typing, compact toolbar wrapping, clean navigation without redundant saves, background autosave ordering/failures, named session note snapshots, full-history search, session editing/deletion, legacy session compatibility, archived-space deletion with retained content and references, and custom wording persistence, resets, and legacy compatibility.
+161 checks (160 deterministic checks plus one opt-in live-model check) cover workspace migration, widget persistence and packing, continuous resize spacing and bounds, stable pointer tracking and cancellation, compact month rows, full-label option sizing and wrapping, date-field bindings and minimum dates, calendar grids and daylight-saving transitions, recurring tasks and calendar series, linked goals, focus pause/resume/relaunch and early/expired finishes, schedule overlap and free-time calculation, optional task estimates, all-day boundaries, reference validation, scoped exports, import validation/backups, Apple exchange with a fake client, Markdown checkboxes and autosave, native note typing with highlights and Unicode, marked-text composition, editor undo across autosave and Preview, stale view refreshes, native redraw of highlighted edits, full-window title/body typing, compact toolbar wrapping, clean navigation without redundant saves, background autosave ordering/failures, named session note snapshots, full-history search, session editing/deletion, legacy session compatibility, archived-space deletion with retained content and references, custom wording persistence, resets, and legacy compatibility; and assistant context privacy, request/response handling, isolated Keychain storage, atomic creation/undo, cancellation, and stale-workspace protection. Apple-specific checks cover factual day briefs, grounded supporting text, provider migration and routing, no automatic cloud fallback or Keychain access, provider-switch cancellation, bounded Unicode context, guided draft validation, and recovery messages.
+
+An additional opt-in test exercises the actual Apple model on a compatible Mac using only temporary sample data (no Calendar/Reminders access):
+
+~~~sh
+STRUKTUR_TEST_APPLE_MODEL=1 swift test --filter AppleAssistantTests/testLiveFoundationModelWhenRequested
+~~~
 
 Debug builds support isolated previews that never touch your personal workspace:
 
@@ -127,4 +159,4 @@ STRUKTUR_PREVIEW=1 STRUKTUR_THEME=dark STRUKTUR_WIDTH=1040 STRUKTUR_HEIGHT=740 \
 
 For wording checks, use `replay-click` or `replay-double-click` with an accessibility identifier such as `wording.dashboardTitle`. `replay-text` replaces the wording editor's text through the native field editor; `replay-key return` / `escape` exercises save/cancel. These helpers only operate in explicitly launched debug previews.
 
-Live Apple testing requires explicit consent: `scripts/apple-qa.sh --allow-disposable-apple-data` builds a separate QA app, requests permissions, creates disposable test containers, verifies round trips, and removes only its own containers. Do not run it without approval. See [verification details and release gates](Documentation/Verification.md).
+Live Calendar/Reminders exchange testing requires explicit consent: `scripts/apple-qa.sh --allow-disposable-apple-data` builds a separate QA app, requests permissions, creates disposable test containers, verifies round trips, and removes only its own containers. Do not run it without approval. See [verification details and release gates](Documentation/Verification.md).
