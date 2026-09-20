@@ -162,7 +162,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
   var priority: TaskPriority = .normal
   var projectID: UUID?
   var color: AccentToken = .sky
-  var estimateMinutes = 30
+  var estimateMinutes: Int?
   var externalIdentifier: String?
   var linkedEventID: UUID?
   var recurrenceID: UUID?

@@ -14,7 +14,9 @@ struct TasksPage: View {
   @State private var showingNewTask = false
 
   private var filteredTasks: [TaskItem] {
-    let candidates = filter == .today ? store.tasks(on: Date()) : store.tasks
+    let now = Date()
+    let tomorrow = now.startOfDay.adding(days: 1)
+    let candidates = filter == .today ? store.tasks(on: now) : store.tasks
     return candidates.filter { task in
       let matchesSearch =
         searchText.isEmpty || task.title.localizedCaseInsensitiveContains(searchText)
@@ -25,14 +27,19 @@ struct TasksPage: View {
         return true
       case .upcoming:
         return !task.isCompleted
-          && (task.dueDate ?? task.plannedStart).map { $0 > Date().endOfDay } == true
+          && [task.dueDate, task.plannedStart].compactMap { $0 }.contains {
+            $0 >= tomorrow
+          }
       case .open:
         return !task.isCompleted
       case .completed:
         return task.isCompleted
       }
     }
-    .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+    .sorted {
+      ($0.dueDate ?? $0.plannedStart ?? .distantFuture)
+        < ($1.dueDate ?? $1.plannedStart ?? .distantFuture)
+    }
   }
 
   var body: some View {
@@ -46,7 +53,8 @@ struct TasksPage: View {
         Spacer()
         StrukturOptions(label: "Filter", selection: $filter, options: TaskFilter.allCases) {
           $0.title
-        }.frame(width: 300)
+        }
+        .frame(width: 300)
         Button {
           showingNewTask = true
         } label: {
@@ -142,7 +150,9 @@ struct TaskRow: View {
           } else if task.cadence == .openEnded {
             Label("No deadline", systemImage: "infinity")
           }
-          if !compact { Label("\(task.estimateMinutes)m", systemImage: "clock") }
+          if !compact, let estimate = task.estimateMinutes {
+            Label("\(estimate)m", systemImage: "clock")
+          }
         }
         .font(.caption2).foregroundStyle(.secondary)
       }
@@ -243,6 +253,7 @@ struct TaskEditorSheet: View {
   @State private var draft: TaskItem
   @State private var hasDueDate: Bool
   @State private var hasPlannedStart: Bool
+  @State private var hasEstimate: Bool
   @State private var showingPreview = false
   private let isNew: Bool
 
@@ -266,6 +277,7 @@ struct TaskEditorSheet: View {
     _draft = State(initialValue: value)
     _hasDueDate = State(initialValue: task?.dueDate != nil)
     _hasPlannedStart = State(initialValue: task?.plannedStart != nil)
+    _hasEstimate = State(initialValue: value.estimateMinutes != nil)
     isNew = task == nil
   }
 
@@ -297,31 +309,52 @@ struct TaskEditorSheet: View {
                 StrukturMenuOption(value: $0, title: $0.title)
               })
           }
-          HStack(spacing: 16) {
-            StrukturToggleRow("Deadline", isOn: $hasDueDate)
-            if hasDueDate {
+          VStack(spacing: 12) {
+            taskTimingRow(isOn: hasDueDate) {
+              StrukturToggleRow("Deadline", isOn: $hasDueDate)
+            } value: {
               StrukturDateField(
                 "Deadline",
                 selection: Binding(get: { draft.dueDate ?? Date() }, set: { draft.dueDate = $0 }),
-                showsLabel: false
-              )
+                showsLabel: false, fillsWidth: true)
             }
-            Spacer()
-            StrukturValueStepper(
-              title: "Estimate", value: $draft.estimateMinutes, range: 5...480, step: 5,
-              valueText: { "\($0) min" })
-          }
-          HStack(spacing: 16) {
-            StrukturToggleRow("Place on calendar", isOn: $hasPlannedStart)
-            if hasPlannedStart {
+            taskTimingRow(isOn: hasEstimate) {
+              StrukturToggleRow(
+                "Estimate duration",
+                isOn: Binding(
+                  get: { hasEstimate },
+                  set: { enabled in
+                    hasEstimate = enabled
+                    draft.estimateMinutes = enabled ? (draft.estimateMinutes ?? 30) : nil
+                  })
+              )
+              .disabled(hasPlannedStart)
+            } value: {
+              StrukturValueStepper(
+                title: "Estimated duration",
+                value: Binding(
+                  get: { draft.estimateMinutes ?? 30 }, set: { draft.estimateMinutes = $0 }),
+                range: 5...480, step: 5, valueText: { "\($0) min" })
+            }
+            taskTimingRow(isOn: hasPlannedStart) {
+              StrukturToggleRow(
+                "Place on calendar",
+                isOn: Binding(
+                  get: { hasPlannedStart },
+                  set: { enabled in
+                    hasPlannedStart = enabled
+                    if enabled {
+                      hasEstimate = true
+                      draft.estimateMinutes = draft.estimateMinutes ?? 30
+                    }
+                  }))
+            } value: {
               StrukturDateField(
                 "Scheduled start",
                 selection: Binding(
                   get: { draft.plannedStart ?? Date() }, set: { draft.plannedStart = $0 }),
-                showsLabel: false
-              )
+                showsLabel: false, fillsWidth: true)
             }
-            Spacer()
           }
 
           StrukturMenuPicker(
@@ -388,6 +421,23 @@ struct TaskEditorSheet: View {
       }
     }
     .frame(width: 680, height: 650).background(StrukturTheme.canvas).tint(StrukturTheme.darkButton)
+  }
+
+  private func taskTimingRow<ToggleContent: View, ValueContent: View>(
+    isOn: Bool, @ViewBuilder toggle: () -> ToggleContent,
+    @ViewBuilder value: () -> ValueContent
+  ) -> some View {
+    HStack(alignment: .center, spacing: 12) {
+      toggle().frame(maxWidth: .infinity)
+      Group {
+        if isOn {
+          value()
+        } else {
+          Color.clear.frame(height: 40).accessibilityHidden(true)
+        }
+      }
+      .frame(maxWidth: .infinity)
+    }
   }
 }
 

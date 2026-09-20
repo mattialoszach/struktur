@@ -32,6 +32,21 @@ final class WorkspaceStoreTests: XCTestCase {
     XCTAssertEqual(restored.tasks.first(where: { $0.id == task.id })?.isCompleted, true)
   }
 
+  func testOptionalTaskEstimatePersistsAndScheduledTasksRequireDuration() throws {
+    let withoutEstimate = TaskItem(title: "Someday")
+    let withEstimate = TaskItem(title: "Timed", estimateMinutes: 45)
+    let workspace = Workspace(tasks: [withoutEstimate, withEstimate])
+    try workspace.validate()
+    let restored = try JSONDecoder.struktur.decode(
+      Workspace.self, from: JSONEncoder.struktur.encode(workspace))
+    XCTAssertNil(restored.tasks[0].estimateMinutes)
+    XCTAssertEqual(restored.tasks[1].estimateMinutes, 45)
+
+    var invalid = workspace
+    invalid.tasks[0].plannedStart = Date()
+    XCTAssertThrowsError(try invalid.validate())
+  }
+
   func testImportedWorkspaceReplacesCurrentData() throws {
     let url = FileManager.default.temporaryDirectory
       .appending(path: "struktur-tests-\(UUID().uuidString)")

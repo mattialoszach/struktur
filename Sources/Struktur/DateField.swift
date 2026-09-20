@@ -8,6 +8,7 @@ struct StrukturDateField: View {
   var minimumDate: Date?
   var displayedComponents: DatePickerComponents
   var showsLabel: Bool
+  var fillsWidth: Bool
   @State private var showingCalendar = false
   @State private var isHovered = false
   @FocusState private var isFocused: Bool
@@ -23,13 +24,15 @@ struct StrukturDateField: View {
 
   init(
     _ title: String, selection: Binding<Date>, minimumDate: Date? = nil,
-    displayedComponents: DatePickerComponents = [.date, .hourAndMinute], showsLabel: Bool = true
+    displayedComponents: DatePickerComponents = [.date, .hourAndMinute], showsLabel: Bool = true,
+    fillsWidth: Bool = false
   ) {
     self.title = title
     _selection = selection
     self.minimumDate = minimumDate
     self.displayedComponents = displayedComponents
     self.showsLabel = showsLabel
+    self.fillsWidth = fillsWidth
   }
 
   var body: some View {
@@ -52,7 +55,9 @@ struct StrukturDateField: View {
           Image(systemName: "calendar").font(.system(size: 11, weight: .medium))
             .foregroundStyle(showingCalendar ? StrukturTheme.ink : StrukturTheme.muted)
         }
-        .frame(minWidth: includesTime ? 142 : 112, minHeight: 20, alignment: .leading)
+        .frame(
+          minWidth: includesTime ? 142 : 112, maxWidth: fillsWidth ? .infinity : nil,
+          minHeight: 20, alignment: .leading)
         .padding(.horizontal, 11).padding(.vertical, 7)
         .background(
           isHovered || showingCalendar ? StrukturTheme.editingSurface : StrukturTheme.surface,
@@ -76,7 +81,8 @@ struct StrukturDateField: View {
       )
       .accessibilityHint(includesTime ? "Opens a calendar and time editor" : "Opens a calendar")
       .popover(isPresented: $showingCalendar, arrowEdge: .bottom) { calendarPopover }
-    }.fixedSize()
+    }
+    .fixedSize(horizontal: !fillsWidth, vertical: true)
   }
 
   private var calendarPopover: some View {

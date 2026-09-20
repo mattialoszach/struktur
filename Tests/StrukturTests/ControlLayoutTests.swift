@@ -29,6 +29,10 @@ final class ControlLayoutTests: XCTestCase {
     XCTAssertGreaterThan(frames[3].width, frames[2].width)
   }
 
+  func testTodayTasksAreTheFirstFilter() {
+    XCTAssertEqual(TaskFilter.allCases, [.today, .upcoming, .open, .completed])
+  }
+
   func testConstrainedOptionsWrapWithoutClippingOrOverlapping() {
     let measured = sizes(taskLabels + ["An unusually long option"])
     for width: CGFloat in [0, 90, 150, 200, 300, 600] {

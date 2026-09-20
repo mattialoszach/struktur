@@ -287,7 +287,7 @@ struct NextMovesWidget: View {
                         Text("Personal")
                       }
                       Spacer(minLength: 0)
-                      Text("\(item.estimateMinutes)m")
+                      if let estimate = item.estimateMinutes { Text("\(estimate)m") }
                     }.font(.system(size: 9)).foregroundStyle(StrukturTheme.muted)
                     if let due = item.dueDate, !item.isCompleted {
                       HStack(spacing: 4) {

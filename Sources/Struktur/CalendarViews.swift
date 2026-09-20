@@ -302,11 +302,13 @@ struct TimelineCalendar: View {
           let id = UUID(uuidString: String(value.dropFirst(14))),
           var task = store.tasks.first(where: { $0.id == id })
         else { return false }
+        let estimate = task.estimateMinutes ?? 30
         let minutes = max(
           0,
           min(
-            (endHour - startHour) * 60 - task.estimateMinutes,
+            (endHour - startHour) * 60 - estimate,
             Int((location.y / hourHeight * 60 / 15).rounded()) * 15))
+        task.estimateMinutes = estimate
         task.plannedStart = window.start.addingTimeInterval(TimeInterval(minutes * 60))
         store.update(task)
         return true

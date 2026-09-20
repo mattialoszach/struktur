@@ -14,7 +14,9 @@ extension Workspace {
       throw WorkspaceValidationError.invalid("The workspace contains duplicate identifiers.")
     }
     guard calendarEntries.allSatisfy({ $0.end > $0.start }),
-      tasks.allSatisfy({ (1...1440).contains($0.estimateMinutes) })
+      tasks.allSatisfy({ task in
+        task.estimateMinutes.map { (1...1440).contains($0) } ?? (task.plannedStart == nil)
+      })
     else {
       throw WorkspaceValidationError.invalid(
         "An event has an invalid time range or a task has an invalid duration.")
@@ -137,10 +139,10 @@ extension WorkspaceStore {
           color: project($0.projectID)?.color ?? $0.color, projectID: $0.projectID, entry: $0)
       }
     let planned = tasks.compactMap { task -> DayBlock? in
-      guard !task.isCompleted, let time = task.plannedStart,
+      guard !task.isCompleted, let time = task.plannedStart, let estimate = task.estimateMinutes,
         projectID == nil || task.projectID == projectID
       else { return nil }
-      let finish = time.addingTimeInterval(TimeInterval(task.estimateMinutes * 60))
+      let finish = time.addingTimeInterval(TimeInterval(estimate * 60))
       guard time < end && finish > start else { return nil }
       return DayBlock(
         id: task.id, title: task.title, start: time, end: finish,
