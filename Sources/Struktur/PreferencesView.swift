@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum PreferencesSection: String, CaseIterable, Identifiable {
-  case general, calendar, dashboard, data, apple
+  case general, calendar, dashboard, assistant, data, apple
   var id: String { rawValue }
   var title: String { rawValue.capitalized }
   var icon: String {
@@ -12,6 +12,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case .dashboard: "square.grid.2x2"
     case .data: "externaldrive"
     case .apple: "apple.logo"
+    case .assistant: "suit.diamond.fill"
     }
   }
 }
@@ -62,6 +63,7 @@ struct PreferencesView: View {
           case .dashboard: DashboardPreferences()
           case .data: DataPreferences()
           case .apple: AppleIntegrationPreferences()
+          case .assistant: AssistantSettingsView(showsTitle: false)
           }
         }
         .buttonStyle(StrukturButtonStyle())

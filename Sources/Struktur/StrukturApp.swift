@@ -39,6 +39,7 @@ struct StrukturCommands: Commands {
   @FocusedValue(\.showQuickCapture) private var showQuickCapture
   @FocusedValue(\.navigateToday) private var navigateToday
   @FocusedValue(\.createNote) private var createNote
+  @FocusedValue(\.toggleAssistant) private var toggleAssistant
 
   var body: some Commands {
     CommandGroup(replacing: .newItem) {
@@ -52,6 +53,11 @@ struct StrukturCommands: Commands {
     CommandMenu("Navigate") {
       Button("Today") { navigateToday?() }
         .keyboardShortcut("t", modifiers: [.command])
+    }
+    CommandMenu("Assistant") {
+      Button("Ask Struktur") { toggleAssistant?() }
+        .keyboardShortcut("j", modifiers: [.command])
+        .disabled(toggleAssistant == nil)
     }
   }
 }
@@ -76,7 +82,15 @@ private struct NavigateTodayKey: FocusedValueKey {
   typealias Value = () -> Void
 }
 
+private struct ToggleAssistantKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
 extension FocusedValues {
+  var toggleAssistant: (() -> Void)? {
+    get { self[ToggleAssistantKey.self] }
+    set { self[ToggleAssistantKey.self] = newValue }
+  }
   var createNote: (() -> Void)? {
     get { self[CreateNoteKey.self] }
     set { self[CreateNoteKey.self] = newValue }

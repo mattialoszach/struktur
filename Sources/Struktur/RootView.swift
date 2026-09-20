@@ -15,6 +15,8 @@ struct RootView: View {
   @State private var linkedGoal: TrackedGoal?
   @State private var showingGoal = false
   @State private var referenceNotFound = false
+  @StateObject private var assistant = AssistantSession.forLaunch()
+  @State private var showingAssistant = false
   private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
   init(initialSection: AppSection = .overview) {
@@ -33,6 +35,13 @@ struct RootView: View {
         topBar
         Rectangle().fill(StrukturTheme.hairline).frame(height: 1)
         detail.frame(maxWidth: .infinity, maxHeight: .infinity)
+          .overlay(alignment: .trailing) {
+            if showingAssistant {
+              AssistantPanel(session: assistant, anchor: selectedDate, close: toggleAssistant)
+                .frame(width: 424).padding(12)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+          }
         if let error = store.lastSaveError {
           Label(error, systemImage: "exclamationmark.triangle").font(.caption)
             .foregroundStyle(.red).padding(10).frame(maxWidth: .infinity)
@@ -54,6 +63,7 @@ struct RootView: View {
       selection = .notes
     }
     .focusedValue(\.showQuickCapture) { quickCapture = $0 }
+    .focusedSceneValue(\.toggleAssistant, toggleAssistant)
     .focusedValue(\.navigateToday) {
       selectedDate = Date()
       if selection != .calendar { selection = .overview }
@@ -134,6 +144,15 @@ struct RootView: View {
           "Example content. Keep it or start empty in Settings.")
       }
       Spacer()
+      Button(action: toggleAssistant) {
+        HStack(spacing: 6) {
+          Image(systemName: "suit.diamond.fill")
+          Text("Ask")
+        }
+        .foregroundStyle(showingAssistant ? StrukturTheme.ink : StrukturTheme.muted)
+        .padding(.horizontal, 9).padding(.vertical, 6)
+        .background(showingAssistant ? StrukturTheme.mint : .clear, in: RoundedRectangle(cornerRadius: 7))
+      }.buttonStyle(.plain).help("Ask Struktur · ⌘ J").accessibilityLabel("Ask Struktur")
       if let session = store.workspace.focusSession {
         Button {
           selection = .focus
@@ -185,6 +204,14 @@ struct RootView: View {
     case .insights: InsightsPage()
     case .settings: PreferencesView()
     }
+  }
+
+  private func toggleAssistant() {
+    if showingAssistant && assistant.isWorking { assistant.stop() }
+    if !showingAssistant && assistant.turns.isEmpty {
+      assistant.scope = selection == .notes ? .note : .schedule
+    }
+    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { showingAssistant.toggle() }
   }
 }
 
