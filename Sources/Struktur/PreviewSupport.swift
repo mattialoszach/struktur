@@ -25,6 +25,19 @@ extension WorkspaceStore {
         sample.preferences.appearance =
           ProcessInfo.processInfo.environment["STRUKTUR_THEME"] == "dark" ? .dark : .light
         sample.preferences.widgetLayout = WidgetConfiguration.starterLayout
+        if ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_FIXTURE"] == "assistant-calendar" {
+          let tomorrow = Date().adding(days: 1).setting(hour: 11)
+          sample.calendarEntries.append(CalendarEntry(title: "Planning review", start: tomorrow,
+            end: tomorrow.addingTimeInterval(3600), kind: .meeting))
+        }
+        if ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_FIXTURE"] == "assistant-tasks" {
+          sample.tasks = [
+            TaskItem(title: "Ten-minute reset", dueDate: Date().adding(days: -4).setting(hour: 17), estimateMinutes: 10),
+            TaskItem(title: "Ten-minute reset", dueDate: Date().adding(days: -2).setting(hour: 17), estimateMinutes: 10),
+            TaskItem(title: "Finish App", estimateMinutes: 20),
+            TaskItem(title: "Already completed", isCompleted: true),
+          ]
+        }
         if ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_FIXTURE"] == "completion" {
           let anchor = Date().setting(hour: 9)
           sample.calendarEntries.append(

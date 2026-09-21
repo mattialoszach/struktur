@@ -32,18 +32,18 @@ if operation == "replay-text" {
 if operation == "replay-key" {
   guard
     let code = [
-      "undo": 6, "return": 36, "assistant": 38, "send": 36, "tab": 48, "escape": 53, "left": 123, "right": 124,
+      "undo": 6, "return": 36, "newline": 36, "assistant": 38, "send": 36, "tab": 48, "escape": 53, "left": 123, "right": 124,
       "down": 125, "up": 126,
     ][label]
   else {
-    fail("Supply undo, return, assistant (⌘ J), send (⌘ Return), tab, escape, left, right, up, or down.")
+    fail("Supply undo, return, assistant (⌘ J), send (Return), newline (Shift-Return), tab, escape, left, right, up, or down.")
   }
-  if ["assistant", "send"].contains(label) {
+  if ["assistant", "newline"].contains(label) {
     app.activate()
     RunLoop.current.run(until: Date().addingTimeInterval(0.2))
     for down in [true, false] {
       let event = CGEvent(keyboardEventSource: nil, virtualKey: UInt16(code), keyDown: down)!
-      event.flags = .maskCommand
+      event.flags = label == "newline" ? .maskShift : .maskCommand
       event.postToPid(pid)
     }
     RunLoop.current.run(until: Date().addingTimeInterval(0.5))
