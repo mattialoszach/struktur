@@ -208,11 +208,10 @@ final class AssistantTests: XCTestCase {
     }
   }
 
-  func testSessionReviewApplyUndoAndContextReset() async {
+  func testSessionReviewApplyUndoAndNewConversation() async {
     let session = AssistantSession(client: FakeAssistantClient(), credentials: FakeCredentials())
     session.refreshConnection(preferences: AssistantPreferences(provider: .openAI))
     XCTAssertTrue(session.hasKey)
-    session.setContextIdentity("schedule")
     session.draft = "Create a task"
     session.send(store: store, anchor: Date())
     await session.waitForResponse()
@@ -224,7 +223,7 @@ final class AssistantTests: XCTestCase {
     XCTAssertEqual(store.tasks.count, 1)
     session.undo(store: store)
     XCTAssertTrue(store.tasks.isEmpty)
-    session.setContextIdentity("note")
+    session.reset()
     XCTAssertTrue(session.turns.isEmpty)
     XCTAssertTrue(session.proposals.isEmpty)
   }

@@ -198,6 +198,26 @@ final class AppleAssistantTests: XCTestCase {
     XCTAssertNil(try AppleAssistantContext.scheduleBrief(AssistantContext(json: #"{"scope":"message"}"#, summary: "", projectIDs: [])))
   }
 
+  func testExplicitUnscheduledTaskConstraintsOverrideInventedDates() throws {
+    let wrong = AssistantAction(kind: .task, title: "Read chapter", dueDate: Date(), start: Date(), estimateMinutes: 25)
+    let context = AssistantContext(json: "{}", summary: "", projectIDs: [])
+    let prompt = "Create one task titled Read chapter. It has no deadline and is not scheduled. Estimate 25 minutes."
+    let fixed = try XCTUnwrap(AppleAssistantClient.groundSupportingText([wrong], prompt: prompt, context: context, history: []).first)
+    XCTAssertNil(fixed.dueDate)
+    XCTAssertNil(fixed.start)
+    XCTAssertEqual(fixed.estimateMinutes, 25)
+    XCTAssertEqual(fixed.id, wrong.id)
+    let absent = try XCTUnwrap(AppleAssistantClient.groundSupportingText([wrong],
+      prompt: "Create a task without a deadline. It is unscheduled and I did not give a duration estimate.", context: context, history: []).first)
+    XCTAssertNil(absent.start)
+    XCTAssertNil(absent.dueDate)
+    XCTAssertNil(absent.estimateMinutes)
+    let dated = try XCTUnwrap(AppleAssistantClient.groundSupportingText([wrong], prompt: "Create a task due tomorrow, scheduled today", context: context, history: []).first)
+    XCTAssertEqual(dated.start, wrong.start)
+    XCTAssertEqual(dated.dueDate, wrong.dueDate)
+    XCTAssertEqual(try AppleAssistantClient.groundSupportingText([wrong, wrong], prompt: prompt, context: context, history: []), [wrong, wrong])
+  }
+
   #if canImport(FoundationModels)
   func testGuidedOutputUsesSharedDateAndProjectValidation() throws {
     guard #available(macOS 26, *) else { throw XCTSkip("Requires Foundation Models") }
@@ -219,6 +239,7 @@ final class AppleAssistantTests: XCTestCase {
     }
     invalid.projectID = "invented-space"
     XCTAssertThrowsError(try invalid.action())
+    XCTAssertNil(try invalid.action(projectIDs: []).projectID, "Without retrieved spaces, drafts must have no space association")
     invalid.projectID = UUID().uuidString
     XCTAssertThrowsError(try invalid.action().validate(projectIDs: []))
     invalid = draft; invalid.end = invalid.start
@@ -250,6 +271,77 @@ final class AppleAssistantTests: XCTestCase {
   #endif
 
   /// Explicitly enabled local inference, isolated workspace only. No Apple Calendar/Reminders access.
+  func testLiveScreenshotDayBriefIncludesOverdueAndUnscheduledTasks() async throws {
+    guard ProcessInfo.processInfo.environment["STRUKTUR_TEST_APPLE_MODEL"] == "1" else {
+      throw XCTSkip("Set STRUKTUR_TEST_APPLE_MODEL=1 to exercise actual on-device inference.")
+    }
+    guard AppleAssistantAvailability.current().isAvailable else { throw XCTSkip(AppleAssistantAvailability.current().title) }
+    let now = try XCTUnwrap(AssistantWireReply.date("2026-09-21T12:00:00+02:00"))
+    store.add(TaskItem(title: "Ten-minute reset", dueDate: now.adding(days: -4), estimateMinutes: 10))
+    store.add(TaskItem(title: "Ten-minute reset", dueDate: now.adding(days: -2), estimateMinutes: 10))
+    store.add(TaskItem(title: "Finish App", estimateMinutes: 20))
+    let tomorrow = now.adding(days: 1).setting(hour: 10)
+    store.add(CalendarEntry(title: "Thesis Assignment Meeting with Supervisor", start: tomorrow, end: tomorrow.addingTimeInterval(3600), kind: .meeting))
+    let overview = try store.assistantOverview(anchor: now.adding(days: -10), now: now)
+    let context = try AssistantTaskContext.merging(store.assistantContext(request: .init(tasks: true), anchor: now, now: now, provider: .apple),
+      into: overview, provider: .apple)
+    let result = try await AppleAssistantClient().respond(
+      prompt: "Summarize my day tomorrow, deadlines, and open tasks. What deserves my attention?",
+      context: context, history: [], model: "", apiKey: "") { [store = store!] query in
+        return try store.assistantContext(request: query, anchor: now.adding(days: -10), now: now, provider: .apple)
+      }
+    XCTAssertTrue(result.message.contains("Finish App"), result.message)
+    XCTAssertEqual(result.message.components(separatedBy: "Ten-minute reset").count - 1, 2, result.message)
+    XCTAssertTrue(result.message.contains("Thesis Assignment Meeting with Supervisor"), result.message)
+    XCTAssertTrue(result.message.contains("overdue"), result.message)
+    XCTAssertFalse(result.message.contains("No open tasks"))
+    XCTAssertTrue(result.actions.isEmpty)
+    print("LIVE APPLE SCREENSHOT TASKS: \(result.message)")
+  }
+
+  func testLiveScreenshotLunchUsesThursdayThisWeek() async throws {
+    guard ProcessInfo.processInfo.environment["STRUKTUR_TEST_APPLE_MODEL"] == "1" else {
+      throw XCTSkip("Set STRUKTUR_TEST_APPLE_MODEL=1 to exercise actual on-device inference.")
+    }
+    guard AppleAssistantAvailability.current().isAvailable else { throw XCTSkip(AppleAssistantAvailability.current().title) }
+    let now = try XCTUnwrap(AssistantWireReply.date("2026-09-21T12:00:00+02:00"))
+    let result = try await AppleAssistantClient().respond(
+      prompt: "I've lunch with my Coworker Matteo on Thursday this week from 12:30 to 13 take to calendar",
+      context: store.assistantOverview(anchor: now.adding(days: -10), now: now), history: [], model: "", apiKey: "") { [store = store!] query in
+        return try store.assistantContext(request: query, anchor: now.adding(days: -10), now: now, provider: .apple)
+      }
+    XCTAssertEqual(result.actions.count, 1, result.message)
+    let event = try XCTUnwrap(result.actions.first)
+    XCTAssertEqual(event.kind, .event)
+    XCTAssertEqual(event.start, try AssistantWireReply.date("2026-09-24T12:30:00+02:00"))
+    XCTAssertEqual(event.end, try AssistantWireReply.date("2026-09-24T13:00:00+02:00"))
+    XCTAssertTrue(store.entries.isEmpty, "A draft must not write before review")
+    print("LIVE APPLE SCREENSHOT LUNCH: \(event.title), \(String(describing: event.start)) → \(String(describing: event.end))")
+  }
+
+  func testLiveCalendarReadRoutesWithoutRequiringEventTimes() async throws {
+    guard ProcessInfo.processInfo.environment["STRUKTUR_TEST_APPLE_MODEL"] == "1" else {
+      throw XCTSkip("Set STRUKTUR_TEST_APPLE_MODEL=1 to exercise actual on-device inference.")
+    }
+    guard AppleAssistantAvailability.current().isAvailable else { throw XCTSkip(AppleAssistantAvailability.current().title) }
+    let now = try XCTUnwrap(AssistantWireReply.date("2026-09-21T12:00:00+02:00"))
+    let tomorrow = try XCTUnwrap(AssistantWireReply.date("2026-09-22T11:00:00+02:00"))
+    store.add(CalendarEntry(title: "Planning review", start: tomorrow, end: tomorrow.addingTimeInterval(3600), kind: .meeting))
+    var retrieved = false
+    let result = try await AppleAssistantClient().respond(prompt: "Can you give me an overview of my appointments tomorrow?",
+      context: store.assistantOverview(anchor: now.adding(days: -10), now: now), history: [], model: "", apiKey: "") { [store = store!] query in
+        retrieved = true
+        XCTAssertTrue(query.schedule)
+        XCTAssertEqual(try AssistantWireReply.date(query.startDate), tomorrow.startOfDay)
+        return try store.assistantContext(request: query, anchor: now.adding(days: -10), now: now, provider: .apple)
+      }
+    XCTAssertTrue(retrieved, "Calendar claims require a workspace read")
+    XCTAssertTrue(result.message.contains("Planning review"))
+    XCTAssertFalse(result.message.contains("No calendar blocks"))
+    XCTAssertTrue(result.actions.isEmpty)
+    print("LIVE APPLE CALENDAR READ: \(result.message)")
+  }
+
   func testLiveFoundationModelWhenRequested() async throws {
     guard ProcessInfo.processInfo.environment["STRUKTUR_TEST_APPLE_MODEL"] == "1" else {
       throw XCTSkip("Set STRUKTUR_TEST_APPLE_MODEL=1 to exercise actual on-device inference.")
@@ -258,13 +350,18 @@ final class AppleAssistantTests: XCTestCase {
     let client = AppleAssistantClient()
     let note = store.createNote(title: "Design systems", markdown: "A design system is a shared set of reusable components and rules. Consistent typography and spacing help teams build coherent interfaces. Our next step is to audit the button components.")
     store.revealNote(note)
+    var retrievedNote = false
     let summary = try await client.respond(prompt: "Summarize this note in two sentences. Do not create anything.",
-      context: store.assistantContext(scope: .note, anchor: Date(), provider: .apple), history: [], model: "", apiKey: "")
+      context: store.assistantOverview(anchor: Date()), history: [], model: "", apiKey: "") { [store = store!] query in
+        retrievedNote = query.note
+        XCTAssertNil(query.noteQuery)
+        return try store.assistantContext(request: query, anchor: Date(), provider: .apple)
+      }
     print("LIVE APPLE SUMMARY: \(summary.message)")
-    XCTAssertFalse(summary.message.isEmpty)
+    XCTAssertTrue(retrievedNote)
+    XCTAssertTrue(summary.message.localizedCaseInsensitiveContains("design") || summary.message.localizedCaseInsensitiveContains("components"))
     XCTAssertTrue(summary.actions.isEmpty)
     let session = AssistantSession()
-    session.scope = .message
     session.draft = "Create one task titled Read chapter. It has no deadline and is not scheduled. Estimate 25 minutes."
     session.send(store: store, anchor: Date())
     await session.waitForResponse()
@@ -308,7 +405,11 @@ final class AppleAssistantTests: XCTestCase {
     XCTAssertTrue(store.entries.isEmpty)
     store.replaceWorkspace(WorkspaceStore.sampleWorkspace())
     let brief = try await client.respond(prompt: "Summarize my selected day, deadlines, and open tasks. What deserves my attention?",
-      context: store.assistantContext(scope: .schedule, anchor: Date(), provider: .apple), history: [], model: "", apiKey: "")
+      context: store.assistantOverview(anchor: Date()), history: [], model: "", apiKey: "") { [store = store!] query in
+        XCTAssertTrue(query.schedule)
+        XCTAssertTrue(query.tasks)
+        return try store.assistantContext(request: query, anchor: Date(), provider: .apple)
+      }
     print("LIVE APPLE DAY BRIEF: \(brief.message)")
     XCTAssertFalse(brief.message.isEmpty)
     XCTAssertTrue(brief.actions.isEmpty)

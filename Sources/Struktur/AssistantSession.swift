@@ -4,7 +4,6 @@ import Combine
 @MainActor
 final class AssistantSession: ObservableObject {
   @Published var draft = ""
-  @Published var scope: AssistantScope = .schedule
   @Published private(set) var turns: [AssistantTurn] = []
   @Published var proposals: [AssistantAction] = []
   @Published var selectedIDs: Set<UUID> = []
@@ -20,7 +19,6 @@ final class AssistantSession: ObservableObject {
   private var requestTask: Task<Void, Never>?
   private var requestID = UUID()
   private var generation: UUID?
-  private var contextIdentity: String?
   private let client: any AssistantServing
   private let appleClient: any AssistantServing
   private let checkAppleAvailability: @Sendable () -> AppleAssistantAvailability
@@ -41,7 +39,7 @@ final class AssistantSession: ObservableObject {
   static func forLaunch() -> AssistantSession {
     #if DEBUG
       if ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW"] == "1",
-        ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_FIXTURE"] == "assistant" {
+        ["assistant", "assistant-calendar", "assistant-tasks"].contains(ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_FIXTURE"] ?? "") {
         return AssistantSession(client: PreviewAssistantClient(), credentials: PreviewAssistantCredentials(), isPreview: true)
       }
     #endif
@@ -63,11 +61,6 @@ final class AssistantSession: ObservableObject {
       do { hasKey = try credentials.read()?.isEmpty == false }
       catch { hasKey = false; self.error = error.localizedDescription }
     }
-  }
-
-  func setContextIdentity(_ identity: String) {
-    if let previous = contextIdentity, previous != identity { reset() }
-    contextIdentity = identity
   }
 
   func cancel() {
@@ -109,7 +102,7 @@ final class AssistantSession: ObservableObject {
         key = savedKey
         selectedClient = client
       }
-      let context = try store.assistantContext(scope: scope, anchor: anchor, provider: provider)
+      let context = try store.assistantOverview(anchor: anchor)
       if let generation, generation != store.workspaceGeneration { reset() }
       let workspaceGeneration = store.workspaceGeneration
       generation = workspaceGeneration
@@ -125,7 +118,29 @@ final class AssistantSession: ObservableObject {
       draft = ""
       requestTask = Task { [weak self, selectedClient] in
         do {
-          let reply = try await selectedClient.respond(prompt: prompt, context: context, history: previous, model: model, apiKey: key)
+          let retrieve: AssistantRetrieve = { [weak self] query in
+            try Task.checkCancellation()
+            guard let self, self.requestID == token,
+              store.workspaceGeneration == workspaceGeneration,
+              (store.preferences.assistant ?? AssistantPreferences()).provider == requestProvider else {
+              throw CancellationError()
+            }
+            let found = try store.assistantContext(request: query, anchor: anchor, provider: requestProvider)
+            self.lastContext = (self.lastContext ?? "") + "\n\n" + found.json
+            return found
+          }
+          let reply: AssistantReply
+          if AssistantTaskContext.isListing(prompt) {
+            reply = try AssistantTaskContext.reply(retrieve(.init(tasks: true)))
+          } else if let query = try AssistantCalendarQuery.resolve(prompt: prompt, history: previous, context: context) {
+            let snapshot = try query.request.map { try retrieve($0) } ?? context
+            reply = try query.reply(context: snapshot)
+          } else {
+            let responseContext = AssistantTaskContext.needsContext(prompt)
+              ? try AssistantTaskContext.merging(retrieve(.init(tasks: true)), into: context, provider: requestProvider) : context
+            reply = try await selectedClient.respond(prompt: prompt, context: responseContext, history: previous,
+              model: model, apiKey: key, retrieve: retrieve)
+          }
           try Task.checkCancellation()
           guard let self, self.requestID == token else { return }
           guard store.workspaceGeneration == workspaceGeneration else {
@@ -144,8 +159,8 @@ final class AssistantSession: ObservableObject {
           self.proposals = reply.actions
           self.selectedIDs = Set(reply.actions.map(\.id))
           self.receipt = nil; self.outcome = nil
-          self.history = Array((previous + [userTurn, AssistantTurn(role: "assistant",
-            text: reply.message + Self.proposalDescription(reply.actions))]).suffix(8))
+          self.history = AssistantTurn.bounded(previous + [userTurn, AssistantTurn(role: "assistant",
+            text: reply.message + Self.proposalDescription(reply.actions))])
           self.isWorking = false
           self.requestTask = nil
         } catch {

@@ -62,7 +62,7 @@ struct AssistantSettingsView: View {
         }
         Text(provider == .apple
           ? "Apple’s Foundation Models framework processes requests on this Mac. No API key is needed and no requests are sent to OpenAI. It is best for focused summaries and extraction; larger notes use a labeled excerpt. You review every proposed addition."
-          : "Only requests you send use AI. You choose the context each time; schedule context excludes note bodies. Conversation history stays in memory until you start a new conversation or close the window. API response storage is turned off. OpenAI’s data policies still apply. API billing is separate from ChatGPT.")
+          : "Only requests you send use AI. The assistant selects relevant context automatically; note excerpts are read only when needed. Conversation history stays in memory until you start a new conversation or close the window. API response storage is turned off. OpenAI’s data policies still apply. API billing is separate from ChatGPT.")
           .font(.system(size: 11)).foregroundStyle(StrukturTheme.muted).lineSpacing(3)
         Text(provider == .apple
           ? "Availability depends on macOS 26 or later, compatible hardware, language/region, and Apple Intelligence being enabled with its model downloaded. Check model runs a short on-device test with no workspace content."

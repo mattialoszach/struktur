@@ -55,7 +55,7 @@ struct StrukturCommands: Commands {
         .keyboardShortcut("t", modifiers: [.command])
     }
     CommandMenu("Assistant") {
-      Button("Ask Struktur") { toggleAssistant?() }
+      Button("Assistant") { toggleAssistant?() }
         .keyboardShortcut("j", modifiers: [.command])
         .disabled(toggleAssistant == nil)
     }

@@ -8,12 +8,8 @@ struct AssistantPanel: View {
   @State private var showingSettings = false
   @State private var showingContext = false
   @State private var editing: AssistantAction?
-  @State private var context: AssistantContext?
-  @FocusState private var composerFocused: Bool
+  @State private var composerFocused = false
 
-  private var identity: String {
-    session.scope.rawValue + (session.scope == .note ? (store.noteLibrary.selectedNoteID?.uuidString ?? "") : "")
-  }
   private var selected: [AssistantAction] { session.proposals.filter { session.selectedIDs.contains($0.id) } }
   private var conflictCount: Int { selected.filter { !store.assistantConflicts($0, among: selected).isEmpty }.count }
 
@@ -22,7 +18,6 @@ struct AssistantPanel: View {
       header
       Divider().overlay(StrukturTheme.hairline)
       if session.isReady {
-        contextBar
         transcript
         if !session.proposals.isEmpty { reviewFooter }
         composer
@@ -37,20 +32,15 @@ struct AssistantPanel: View {
     .foregroundStyle(StrukturTheme.ink)
     .onAppear {
       refreshConnection()
-      session.setContextIdentity(identity)
-      refreshContext()
       composerFocused = true
     }
-    .onChange(of: identity) { _, value in session.setContextIdentity(value); refreshContext() }
-    .onChange(of: anchor) { _, _ in refreshContext() }
-    .onChange(of: store.preferences.assistant?.provider) { _, _ in refreshConnection(); refreshContext() }
+    .onChange(of: store.preferences.assistant?.provider) { _, _ in refreshConnection() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       refreshConnection()
     }
-    .onReceive(store.objectWillChange) { refreshContext() }
     .onChange(of: store.workspaceGeneration) { _, _ in session.reset() }
     .onExitCommand { if session.isWorking { session.stop() } else { close() } }
-    .sheet(isPresented: $showingSettings, onDismiss: { refreshConnection(); refreshContext(); composerFocused = true }) {
+    .sheet(isPresented: $showingSettings, onDismiss: { refreshConnection(); composerFocused = true }) {
       VStack(spacing: 0) {
         AssistantSettingsView()
         Divider()
@@ -72,6 +62,7 @@ struct AssistantPanel: View {
       Image(systemName: "suit.diamond.fill").font(.system(size: 14)).foregroundStyle(StrukturTheme.muted)
       Text("Assistant").font(.strukturSerif(20, weight: .medium))
       Spacer()
+      contextInfo
       Button { session.reset(); composerFocused = true } label: { Image(systemName: "square.and.pencil") }
         .help("New conversation").accessibilityLabel("New conversation")
       Button { showingSettings = true } label: { Image(systemName: "slider.horizontal.3") }
@@ -84,37 +75,25 @@ struct AssistantPanel: View {
     .buttonStyle(.plain).font(.system(size: 13)).padding(18)
   }
 
-  private var contextBar: some View {
-    VStack(alignment: .leading, spacing: 7) {
-      HStack(spacing: 8) {
-        Image(systemName: "paperclip").foregroundStyle(StrukturTheme.muted)
-        Picker("Context", selection: $session.scope) {
-          ForEach(AssistantScope.allCases) { Text($0.title).tag($0) }
-        }.labelsHidden().pickerStyle(.menu).fixedSize()
-          .accessibilityLabel("Assistant context").disabled(session.isWorking)
-        Spacer()
-        Button { refreshContext(); showingContext = true } label: { Image(systemName: "info.circle") }
-          .buttonStyle(.plain).accessibilityLabel("Inspect shared context")
-          .popover(isPresented: $showingContext) {
-            VStack(alignment: .leading, spacing: 12) {
-              Text("What the assistant sees").font(.strukturSerif(19))
-              Text(session.provider == .apple
-                ? "Your message, up to two recent message excerpts, and this context are processed on this Mac. Limited context is marked below. Changing context or provider starts a new conversation."
-                : "Your message, up to eight recent conversation messages, and fresh context are sent to OpenAI when you press Send. Changing context or provider starts a new conversation.")
-                .font(.caption).foregroundStyle(StrukturTheme.muted)
-              ScrollView {
-                Text(context?.json ?? "Open a note to share its text.")
-                  .font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
-                  .frame(maxWidth: .infinity, alignment: .leading)
-              }
-              Text("Note images, other note contents, and task/event notes are excluded from schedule context.")
-                .font(.caption2).foregroundStyle(StrukturTheme.muted)
-            }.padding(20).frame(width: 440, height: 450)
+  private var contextInfo: some View {
+    Button { showingContext = true } label: { Image(systemName: "info.circle") }
+      .buttonStyle(.plain).help("What the assistant sees").accessibilityLabel("Inspect shared context")
+      .popover(isPresented: $showingContext) {
+        VStack(alignment: .leading, spacing: 12) {
+          Text("Relevant context, automatically").font(.strukturSerif(19))
+          Text(session.provider == .apple
+            ? "The assistant selects relevant tasks, calendar blocks, space names, or note excerpts on this Mac. Recent conversation excerpts help with follow-ups."
+            : "When you send, the assistant can look up relevant tasks, calendar blocks, space names, or note excerpts. Your message, bounded recent conversation, and retrieved context are sent to OpenAI.")
+            .font(.caption).foregroundStyle(StrukturTheme.muted)
+          ScrollView {
+            Text(session.lastContext ?? "No workspace content has been requested yet.")
+              .font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+              .frame(maxWidth: .infinity, alignment: .leading)
           }
+          Text("Last request shown above. Note images and task/event note bodies are excluded. Changing provider starts a new conversation.")
+            .font(.caption2).foregroundStyle(StrukturTheme.muted)
+        }.padding(20).frame(width: 400, height: 420)
       }
-      Text(session.isPreview ? "Preview · simulated responses · no network" : (context?.summary ?? "Open a note first, or choose another context."))
-        .font(.system(size: 10)).foregroundStyle(StrukturTheme.muted).fixedSize(horizontal: false, vertical: true)
-    }.padding(.horizontal, 18).padding(.vertical, 12).background(StrukturTheme.canvas)
   }
 
   private var transcript: some View {
@@ -180,7 +159,7 @@ struct AssistantPanel: View {
         .font(.system(size: 13)).foregroundStyle(StrukturTheme.muted).lineSpacing(3)
       VStack(spacing: 8) {
         suggestion("Give me a day brief", icon: "sun.max", prompt: "Summarize my selected day, deadlines, and open tasks. What deserves my attention?")
-        suggestion("Turn a note into next steps", icon: "checklist", prompt: "Suggest tasks from this note. Keep explicit deadlines, and ask if anything is ambiguous.", scope: .note)
+        suggestion("Turn a note into next steps", icon: "checklist", prompt: "Suggest tasks from this note. Keep explicit deadlines, and ask if anything is ambiguous.")
         suggestion("Make room for focused work", icon: "calendar", prompt: "Help me plan a focus block. Ask me which task, day, and duration I have in mind.")
       }
       Text("You review every proposed item before it is added.")
@@ -188,9 +167,8 @@ struct AssistantPanel: View {
     }.padding(.vertical, 12)
   }
 
-  private func suggestion(_ title: String, icon: String, prompt: String, scope: AssistantScope = .schedule) -> some View {
+  private func suggestion(_ title: String, icon: String, prompt: String) -> some View {
     Button {
-      session.scope = scope
       session.draft = prompt
       composerFocused = true
     } label: {
@@ -269,20 +247,25 @@ struct AssistantPanel: View {
 
   private var composer: some View {
     VStack(alignment: .leading, spacing: 10) {
-      TextField("Ask, plan, or capture an idea…", text: $session.draft, axis: .vertical)
-        .textFieldStyle(.plain).lineLimit(2...5).font(.system(size: 13)).focused($composerFocused)
-        .accessibilityLabel("Message assistant").disabled(session.isWorking)
+      AssistantComposer(text: $session.draft, focused: $composerFocused, isEnabled: !session.isWorking) {
+        if canSend { session.send(store: store, anchor: anchor) }
+      }.frame(height: 58)
+        .overlay(alignment: .topLeading) {
+          if session.draft.isEmpty {
+            Text("Ask, plan, or capture an idea…").font(.system(size: 13))
+              .foregroundStyle(StrukturTheme.muted).padding(.top, 4).allowsHitTesting(false)
+          }
+        }
       HStack {
-        Text(session.isPreview ? "Simulated preview" : (session.provider == .apple ? "On this Mac · ⌘ ↩ to send" : "Sent to OpenAI · ⌘ ↩ to send"))
+        Text(session.isPreview ? "Simulated preview · ↩ Send · ⇧↩ New line" : (session.provider == .apple ? "On this Mac · ↩ Send · ⇧↩ New line" : "OpenAI · ↩ Send · ⇧↩ New line"))
           .font(.system(size: 10)).foregroundStyle(StrukturTheme.muted)
         Spacer()
         Button { session.send(store: store, anchor: anchor) } label: {
           Image(systemName: "arrow.up").font(.system(size: 12, weight: .semibold)).frame(width: 18, height: 18)
         }
         .buttonStyle(StrukturButtonStyle(primary: true, compact: true))
-        .keyboardShortcut(.return, modifiers: [.command]).accessibilityLabel("Send to assistant")
-        .disabled(session.isWorking || session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          || session.draft.count > session.provider.messageLimit || context == nil)
+        .accessibilityLabel("Send to assistant").help("Send · Return")
+        .disabled(!canSend)
       }
       if session.draft.count > session.provider.messageLimit {
         Text("Message is too long (\(session.provider.messageLimit) characters maximum).")
@@ -298,7 +281,7 @@ struct AssistantPanel: View {
       Text("Summarize your day and notes. Turn plans into tasks and calendar blocks, right here in Struktur.")
         .font(.system(size: 13)).lineSpacing(4).foregroundStyle(StrukturTheme.muted)
       Label("Open anytime with ⌘ J", systemImage: "keyboard")
-      Label("Choose exactly what to share", systemImage: "paperclip")
+      Label("Finds relevant context automatically", systemImage: "sparkles")
       Label("Review, edit, and undo additions", systemImage: "checkmark.circle")
       if session.provider == .apple {
         VStack(alignment: .leading, spacing: 8) {
@@ -321,9 +304,9 @@ struct AssistantPanel: View {
     }.font(.system(size: 12)).padding(24).padding(.top, 14).frame(maxHeight: .infinity, alignment: .top)
   }
 
-  private func refreshContext() {
-    context = try? store.assistantContext(scope: session.scope, anchor: anchor,
-      provider: (store.preferences.assistant ?? AssistantPreferences()).provider)
+  private var canSend: Bool {
+    session.isReady && !session.isWorking && !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && session.draft.count <= session.provider.messageLimit
   }
   private func refreshConnection() {
     session.refreshConnection(preferences: store.preferences.assistant ?? AssistantPreferences())

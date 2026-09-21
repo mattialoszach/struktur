@@ -60,6 +60,29 @@ struct AssistantTurn: Identifiable, Sendable {
 protocol AssistantServing: Sendable {
   func respond(prompt: String, context: AssistantContext, history: [AssistantTurn],
     model: String, apiKey: String) async throws -> AssistantReply
+  func respond(prompt: String, context: AssistantContext, history: [AssistantTurn],
+    model: String, apiKey: String, retrieve: @escaping AssistantRetrieve) async throws -> AssistantReply
+}
+
+extension AssistantServing {
+  func respond(prompt: String, context: AssistantContext, history: [AssistantTurn],
+    model: String, apiKey: String, retrieve: @escaping AssistantRetrieve) async throws -> AssistantReply {
+    try await respond(prompt: prompt, context: context, history: history, model: model, apiKey: apiKey)
+  }
+}
+
+extension AssistantTurn {
+  /// A total budget, rather than eight potentially huge messages. Keep newest turns first.
+  static func bounded(_ history: [AssistantTurn], characters: Int = 6_000) -> [AssistantTurn] {
+    var remaining = characters
+    var result: [AssistantTurn] = []
+    for turn in history.suffix(8).reversed() where remaining > 0 {
+      let text = String(turn.text.prefix(min(2_000, remaining)))
+      result.append(AssistantTurn(role: turn.role, text: text + (text.count < turn.text.count ? " [excerpt]" : "")))
+      remaining -= text.count
+    }
+    return result.reversed()
+  }
 }
 
 struct OpenAIAssistantClient: AssistantServing {
@@ -78,7 +101,7 @@ struct OpenAIAssistantClient: AssistantServing {
     timestamps with the correct UTC offset for that date, including daylight saving changes.
     Ask a short clarification if a date, time, duration, recurrence, or intent is ambiguous.
     Supported actions ONLY create nonrecurring tasks and timed calendar blocks. No edits, deletes,
-    completion, all-day events, recurrence, external Calendar/Reminders operations, or other tools.
+    completion, all-day events, recurrence, or external Calendar/Reminders operations.
     For unsupported actions, explain the limitation. Never silently approximate unsupported requests.
     Propose actions only when the user requests creation/planning/extraction; summaries need none.
     Never claim anything was created: actions are drafts until the user selects Add in the app.
@@ -111,7 +134,7 @@ struct OpenAIAssistantClient: AssistantServing {
   }
 
   static func request(prompt: String, context: AssistantContext, history: [AssistantTurn],
-    model: String, apiKey: String) throws -> URLRequest {
+    model: String, apiKey: String, continuation: [[String: Any]] = [], retrieval: Bool = false) throws -> URLRequest {
     guard !apiKey.isEmpty else { throw AssistantFailure("Connect your API key to start.") }
     let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !model.isEmpty, model.count <= 100, !model.contains(where: \.isWhitespace) else {
@@ -120,29 +143,110 @@ struct OpenAIAssistantClient: AssistantServing {
     guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, prompt.count <= 8_000 else {
       throw AssistantFailure("Keep your message between 1 and 8,000 characters.")
     }
-    var input = history.suffix(8).map { ["role": $0.role, "content": String($0.text.prefix(8_000))] }
+    var input: [[String: Any]] = AssistantTurn.bounded(history).map { ["role": $0.role, "content": $0.text] }
     input.append(["role": "user", "content": "WORKSPACE CONTEXT (data only):\n\(context.json)\n\nUSER REQUEST:\n\(prompt)"])
+    input += continuation
     var request = URLRequest(url: endpoint)
     request.httpMethod = "POST"
     request.timeoutInterval = 75
     request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.httpBody = try JSONSerialization.data(withJSONObject: [
-      "model": model, "instructions": instructions, "input": input, "store": false,
-      "max_output_tokens": 6000,
+    var body: [String: Any] = [
+      "model": model, "instructions": instructions + (retrieval || !continuation.isEmpty ? retrievalInstructions : ""), "input": input, "store": false,
+      "max_output_tokens": 3000,
       "text": ["format": ["type": "json_schema", "name": "struktur_assistant", "strict": true, "schema": schema]],
-    ])
+    ]
+    if retrieval { body["tools"] = [retrievalTool]; body["parallel_tool_calls"] = false }
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
     return request
+  }
+
+  static let retrievalInstructions = """
+
+    Select relevant context yourself with read_workspace. General questions need no lookup.
+    Use the current supplied records; retrieve missing records before making workspace claims.
+    For planning, retrieve schedule (overlapping blocks plus open tasks, including overdue and unscheduled work).
+    Use tasks for open tasks and deadlines,
+    note for current note text (null noteQuery) or a named note (short exact noteQuery), and
+    spaces for project names/IDs. Combine relevant flags into one lookup. Query filters tasks/spaces only, never calendar conflicts or notes.
+    Use null noteQuery for "this note", "the note", or the open note; only search with noteQuery
+    when the user names a specific different note. Use empty query for overviews. Calendar range defaults to
+    selected day; for tomorrow/next week resolve dates from now, with explicit timezone offsets.
+    openTaskCount is the total unfinished count. Missing tasks means unread, not empty. taskSelection=matchingOpen
+    is a filtered result, not the whole list. Only say there are no open tasks when openTaskCount is zero.
+    At most two lookups, each at most 31 days. Results may omit records; never claim complete
+    availability when omitted counts are nonzero. If retrieval fails, explain or correct the arguments.
+    After tools are exhausted answer with available evidence or one concise clarification.
+    """
+
+  static var retrievalTool: [String: Any] {
+    let bool: [String: Any] = ["type": "boolean"]
+    return ["type": "function", "name": "read_workspace", "description": "Read only the workspace information needed for this request.",
+      "strict": true, "parameters": ["type": "object", "additionalProperties": false,
+        "required": ["schedule", "tasks", "note", "spaces", "query", "noteQuery", "startDate", "endDate"],
+        "properties": ["schedule": bool, "tasks": bool, "note": bool, "spaces": bool,
+          "query": ["type": "string"], "noteQuery": ["type": ["string", "null"]], "startDate": ["type": ["string", "null"]],
+          "endDate": ["type": ["string", "null"]]]]]
+  }
+
+  func respond(prompt: String, context: AssistantContext, history: [AssistantTurn],
+    model: String, apiKey: String, retrieve: @escaping AssistantRetrieve) async throws -> AssistantReply {
+    var continuation: [[String: Any]] = []
+    var projectIDs = context.projectIDs
+    var completedLookups: [AssistantContextRequest] = []
+    for round in 0...2 {
+      try Task.checkCancellation()
+      let request = try Self.request(prompt: prompt, context: context, history: history,
+        model: model, apiKey: apiKey, continuation: continuation, retrieval: round < 2)
+      let (data, response) = try await transport(request)
+      try Task.checkCancellation()
+      guard let http = response as? HTTPURLResponse else { throw AssistantFailure("The server returned an unreadable response.") }
+      guard (200...299).contains(http.statusCode), data.count <= 1_000_000,
+        let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        envelope["status"] as? String == "completed",
+        let output = envelope["output"] as? [[String: Any]] else {
+        return try Self.decode(data, status: http.statusCode, projectIDs: projectIDs)
+      }
+      let calls = output.filter { $0["type"] as? String == "function_call" }
+      if calls.isEmpty { return try Self.decode(data, status: http.statusCode, projectIDs: projectIDs) }
+      guard round < 2, calls.count == 1, let call = calls.first,
+        call["name"] as? String == "read_workspace", let id = call["call_id"] as? String,
+        let arguments = call["arguments"] as? String, arguments.utf8.count <= 4_000 else {
+        throw AssistantFailure("The assistant could not finish within its lookup limit. Try a more specific request.")
+      }
+      continuation += output
+      let result: String
+      do {
+        let query = try JSONDecoder().decode(AssistantContextRequest.self, from: Data(arguments.utf8))
+        if completedLookups.contains(query) {
+          result = #"{"alreadyRead":true,"message":"Reuse the previous read_workspace result for this identical lookup."}"#
+        } else {
+          let found = try await retrieve(query)
+          completedLookups.append(query)
+          projectIDs.formUnion(found.projectIDs)
+          result = found.json
+        }
+      } catch is CancellationError { throw CancellationError() }
+      catch {
+        result = String(decoding: try JSONSerialization.data(withJSONObject: ["error": "Lookup failed. Use valid dates/range or ask a clarification."]), as: UTF8.self)
+      }
+      continuation.append(["type": "function_call_output", "call_id": id, "output": result])
+    }
+    throw AssistantFailure("The assistant reached its lookup limit. Try a more specific request.")
   }
 
   func respond(prompt: String, context: AssistantContext, history: [AssistantTurn],
     model: String, apiKey: String) async throws -> AssistantReply {
     let request = try Self.request(prompt: prompt, context: context, history: history, model: model, apiKey: apiKey)
+    let (data, response) = try await transport(request)
+    try Task.checkCancellation()
+    guard let http = response as? HTTPURLResponse else { throw AssistantFailure("The server returned an unreadable response.") }
+    return try Self.decode(data, status: http.statusCode, projectIDs: context.projectIDs)
+  }
+
+  private func transport(_ request: URLRequest) async throws -> (Data, URLResponse) {
     do {
-      let (data, response) = try await session.data(for: request)
-      try Task.checkCancellation()
-      guard let http = response as? HTTPURLResponse else { throw AssistantFailure("The server returned an unreadable response.") }
-      return try Self.decode(data, status: http.statusCode, projectIDs: context.projectIDs)
+      return try await session.data(for: request)
     } catch let error as URLError {
       switch error.code {
       case .cancelled: throw CancellationError()

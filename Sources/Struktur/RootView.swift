@@ -144,15 +144,7 @@ struct RootView: View {
           "Example content. Keep it or start empty in Settings.")
       }
       Spacer()
-      Button(action: toggleAssistant) {
-        HStack(spacing: 6) {
-          Image(systemName: "suit.diamond.fill")
-          Text("Ask")
-        }
-        .foregroundStyle(showingAssistant ? StrukturTheme.ink : StrukturTheme.muted)
-        .padding(.horizontal, 9).padding(.vertical, 6)
-        .background(showingAssistant ? StrukturTheme.mint : .clear, in: RoundedRectangle(cornerRadius: 7))
-      }.buttonStyle(.plain).help("Ask Struktur · ⌘ J").accessibilityLabel("Ask Struktur")
+      AssistantLauncher(isOpen: showingAssistant, action: toggleAssistant)
       if let session = store.workspace.focusSession {
         Button {
           selection = .focus
@@ -208,9 +200,6 @@ struct RootView: View {
 
   private func toggleAssistant() {
     if showingAssistant && assistant.isWorking { assistant.stop() }
-    if !showingAssistant && assistant.turns.isEmpty {
-      assistant.scope = selection == .notes ? .note : .schedule
-    }
     withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { showingAssistant.toggle() }
   }
 }
