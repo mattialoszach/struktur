@@ -224,7 +224,9 @@ private struct PreviewAssistantCredentials: AssistantCredentialStore {
 private struct PreviewAssistantClient: AssistantServing {
   func respond(prompt: String, context: AssistantContext, history: [AssistantTurn],
     model: String, apiKey: String) async throws -> AssistantReply {
-    try await Task.sleep(for: .milliseconds(600))
+    let delayText = ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_ASSISTANT_DELAY_MS"] ?? ""
+    let requestedDelay = Int(delayText) ?? 600
+    try await Task.sleep(for: .milliseconds(min(10_000, max(0, requestedDelay))))
     if prompt.localizedCaseInsensitiveContains("summar") || prompt.localizedCaseInsensitiveContains("brief") {
       return AssistantReply(message: "This is a simulated preview answer. Your schedule and open tasks are available as context. Try asking to create a task and a calendar block to exercise the review flow.", actions: [])
     }
