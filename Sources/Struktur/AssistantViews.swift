@@ -4,7 +4,12 @@ struct AssistantPanel: View {
   @EnvironmentObject private var store: WorkspaceStore
   @ObservedObject var session: AssistantSession
   let anchor: Date
+  let position: AssistantPanelPosition
   let close: () -> Void
+  let moveChanged: (CGSize) -> Void
+  let moveEnded: (CGSize) -> Void
+  let moveCancelled: () -> Void
+  let moveTo: (AssistantPanelPosition) -> Void
   @State private var showingSettings = false
   @State private var showingContext = false
   @State private var editing: AssistantAction?
@@ -59,10 +64,47 @@ struct AssistantPanel: View {
 
   private var header: some View {
     HStack(spacing: 10) {
-      Image(systemName: "suit.diamond.fill").font(.system(size: 14)).foregroundStyle(StrukturTheme.muted)
-      Text("Assistant").font(.strukturSerif(20, weight: .medium))
-      Spacer()
+      HStack(spacing: 8) {
+        Image(systemName: "suit.diamond.fill").font(.system(size: 14))
+          .foregroundStyle(StrukturTheme.muted)
+        Text("Assistant").font(.strukturSerif(20, weight: .medium))
+          .fixedSize(horizontal: true, vertical: false)
+        Image(systemName: "line.3.horizontal").font(.system(size: 10))
+          .foregroundStyle(StrukturTheme.muted)
+        Spacer(minLength: 0)
+      }
+      .frame(maxWidth: .infinity, minHeight: 24, maxHeight: 24, alignment: .leading)
+      .contentShape(Rectangle())
+      .overlay {
+        NativeDragSurface(began: { _ in composerFocused = false }, changed: moveChanged,
+          ended: { delta, _ in moveEnded(delta); composerFocused = true },
+          cancelled: { moveCancelled(); composerFocused = true })
+      }
+      .help("Drag to move assistant left, middle, or right")
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("Move assistant")
+      .accessibilityValue("Position: \(position.title)")
+      .accessibilityIdentifier("assistant.drag")
+      .accessibilityAction(named: "Move left") { moveTo(.left) }
+      .accessibilityAction(named: "Move to middle") { moveTo(.middle) }
+      .accessibilityAction(named: "Move right") { moveTo(.right) }
       contextInfo
+      Menu {
+        ForEach(AssistantPanelPosition.allCases) { choice in
+          Button {
+            moveTo(choice)
+          } label: {
+            if choice == position { Label(choice.title, systemImage: "checkmark") }
+            else { Text(choice.title) }
+          }
+        }
+      } label: {
+        Image(systemName: "rectangle.split.3x1").frame(width: 18, height: 22)
+      }
+      .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+      .help("Move assistant")
+      .accessibilityLabel("Assistant position")
+      .accessibilityIdentifier("assistant.position")
       Button { session.reset(); composerFocused = true } label: { Image(systemName: "square.and.pencil") }
         .help("New conversation").accessibilityLabel("New conversation")
       Button { showingSettings = true } label: { Image(systemName: "slider.horizontal.3") }

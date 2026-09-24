@@ -1,19 +1,49 @@
 import Foundation
+import CoreGraphics
+
+enum AssistantPanelPosition: String, Codable, CaseIterable, Identifiable, Sendable {
+  case left, middle, right
+
+  var id: String { rawValue }
+  var title: String { rawValue.capitalized }
+
+  func centerX(in availableWidth: CGFloat, panelWidth: CGFloat, margin: CGFloat = 12) -> CGFloat {
+    let left = margin + panelWidth / 2
+    let right = max(left, availableWidth - margin - panelWidth / 2)
+    switch self {
+    case .left: return left
+    case .middle: return (left + right) / 2
+    case .right: return right
+    }
+  }
+
+  static func nearest(to centerX: CGFloat, in availableWidth: CGFloat,
+    panelWidth: CGFloat, margin: CGFloat = 12) -> Self {
+    allCases.min {
+      abs($0.centerX(in: availableWidth, panelWidth: panelWidth, margin: margin) - centerX)
+        < abs($1.centerX(in: availableWidth, panelWidth: panelWidth, margin: margin) - centerX)
+    } ?? .right
+  }
+}
 
 struct AssistantPreferences: Codable, Equatable, Sendable {
   var model = "gpt-4.1-mini"
   var provider: AssistantProvider = .apple
+  var position: AssistantPanelPosition = .right
 
-  init(model: String = "gpt-4.1-mini", provider: AssistantProvider = .apple) {
+  init(model: String = "gpt-4.1-mini", provider: AssistantProvider = .apple,
+    position: AssistantPanelPosition = .right) {
     self.model = model
     self.provider = provider
+    self.position = position
   }
 
-  private enum CodingKeys: String, CodingKey { case model, provider }
+  private enum CodingKeys: String, CodingKey { case model, provider, position }
   init(from decoder: Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
     model = try values.decodeIfPresent(String.self, forKey: .model) ?? "gpt-4.1-mini"
     provider = try values.decodeIfPresent(AssistantProvider.self, forKey: .provider) ?? .apple
+    position = try values.decodeIfPresent(AssistantPanelPosition.self, forKey: .position) ?? .right
   }
 }
 

@@ -34,11 +34,39 @@ final class AssistantTests: XCTestCase {
     let legacy = try JSONDecoder().decode(UserPreferences.self, from: Data("{}".utf8))
     XCTAssertNil(legacy.assistant)
     XCTAssertEqual((legacy.assistant ?? AssistantPreferences()).model, "gpt-4.1-mini")
+    XCTAssertEqual((legacy.assistant ?? AssistantPreferences()).position, .right)
     store.updatePreferences { $0.assistant = AssistantPreferences(model: "my-model"); $0.appearance = .dark }
     let restored = WorkspaceStore(fileURL: directory.appending(path: "workspace.json"))
     XCTAssertEqual(restored.preferences.assistant?.model, "my-model")
     XCTAssertEqual(restored.preferences.appearance, .dark)
     XCTAssertFalse(String(decoding: try store.exportData(), as: UTF8.self).contains("apiKey"))
+  }
+
+  func testAssistantPositionSnapsAndPersistsWithoutResettingProvider() throws {
+    let legacy = try JSONDecoder().decode(AssistantPreferences.self,
+      from: Data(#"{"model":"legacy-model","provider":"openAI"}"#.utf8))
+    XCTAssertEqual(legacy.position, .right)
+    XCTAssertEqual(legacy.model, "legacy-model")
+    XCTAssertEqual(legacy.provider, .openAI)
+    let width: CGFloat = 829
+    let panelWidth: CGFloat = 424
+    XCTAssertEqual(AssistantPanelPosition.left.centerX(in: width, panelWidth: panelWidth), 224)
+    XCTAssertEqual(AssistantPanelPosition.middle.centerX(in: width, panelWidth: panelWidth), 414.5)
+    XCTAssertEqual(AssistantPanelPosition.right.centerX(in: width, panelWidth: panelWidth), 605)
+    XCTAssertEqual(AssistantPanelPosition.nearest(to: 250, in: width, panelWidth: panelWidth), .left)
+    XCTAssertEqual(AssistantPanelPosition.nearest(to: 420, in: width, panelWidth: panelWidth), .middle)
+    XCTAssertEqual(AssistantPanelPosition.nearest(to: 580, in: width, panelWidth: panelWidth), .right)
+
+    store.updatePreferences { $0.assistant = AssistantPreferences(model: "custom-model", provider: .openAI) }
+    store.updatePreferences {
+      var assistant = $0.assistant ?? AssistantPreferences()
+      assistant.position = .left
+      $0.assistant = assistant
+    }
+    let restored = WorkspaceStore(fileURL: directory.appending(path: "workspace.json"))
+    XCTAssertEqual(restored.preferences.assistant?.position, .left)
+    XCTAssertEqual(restored.preferences.assistant?.provider, .openAI)
+    XCTAssertEqual(restored.preferences.assistant?.model, "custom-model")
   }
 
   func testContextScopesExcludePrivateBodiesAndDeletedNotes() throws {
