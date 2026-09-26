@@ -31,18 +31,13 @@ struct AssistantPanel: View {
         setup
       }
     }
-    .background {
-      ZStack {
-        RoundedRectangle(cornerRadius: 18).fill(StrukturTheme.surface)
-        if session.isWorking { AssistantWorkingGlow(borderOnly: false) }
-      }.clipShape(RoundedRectangle(cornerRadius: 18))
-    }
+    .background(StrukturTheme.surface, in: RoundedRectangle(cornerRadius: 18))
     .clipShape(RoundedRectangle(cornerRadius: 18))
     .overlay {
-      ZStack {
-        RoundedRectangle(cornerRadius: 18).strokeBorder(StrukturTheme.hairline)
-        if session.isWorking { AssistantWorkingGlow(borderOnly: true) }
-      }
+      RoundedRectangle(cornerRadius: 18).strokeBorder(StrukturTheme.hairline)
+    }
+    .overlay {
+      if session.isWorking { AssistantWorkingGlow() }
     }
     .shadow(color: .black.opacity(0.12), radius: 20, x: -4, y: 8)
     .foregroundStyle(StrukturTheme.ink)
@@ -374,42 +369,29 @@ struct AssistantPanel: View {
 private struct AssistantWorkingGlow: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.colorScheme) private var colorScheme
-  let borderOnly: Bool
 
   var body: some View {
     TimelineView(.animation(minimumInterval: 1.0 / 24, paused: reduceMotion)) { timeline in
-      GeometryReader { geometry in
-        let phase = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate * 2 * .pi / 2.8
-        ZStack {
-          if borderOnly {
-            cornerLights(in: geometry.size, phase: phase, border: true)
-              .mask { RoundedRectangle(cornerRadius: 18).strokeBorder(lineWidth: 3) }
-          } else {
-            cornerLights(in: geometry.size, phase: phase, border: false)
-          }
-        }
-        .frame(width: geometry.size.width, height: geometry.size.height)
+      let phase = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate * 2 * .pi / 10
+      let gradient = AngularGradient(
+        colors: [AccentToken.lilac, .peach, .butter, .mint, .sky, .lilac].map(\.color),
+        center: UnitPoint(x: 0.5 + 0.12 * sin(phase * 0.7), y: 0.5 + 0.12 * cos(phase * 0.9)),
+        angle: .radians(phase.truncatingRemainder(dividingBy: 2 * .pi)))
+      let outline = RoundedRectangle(cornerRadius: 18)
+      // Every edge stays lit. The gradient drifts and changes shape gently, while
+      // the crisp inner line keeps the panel's silhouette clear in either theme.
+      ZStack {
+        outline.strokeBorder(gradient, lineWidth: 8)
+          .blur(radius: 5)
+          .opacity(colorScheme == .dark ? 0.5 : 0.42)
+        outline.strokeBorder(gradient, lineWidth: 3.5)
+          .blur(radius: 1.5).opacity(0.65)
+        outline.strokeBorder(gradient, lineWidth: 1.5)
       }
+      .opacity(reduceMotion ? 0.9 : 0.9 + 0.1 * sin(phase * 1.6))
     }
     .allowsHitTesting(false)
     .accessibilityHidden(true)
-  }
-
-  private func cornerLights(in size: CGSize, phase: Double, border: Bool) -> some View {
-    ZStack {
-      ForEach(0..<4) { index in
-        let intensity = reduceMotion ? 0.72 : 0.65 + 0.35 * sin(phase + Double(index) * .pi / 2)
-        let color = [AccentToken.lilac, .peach, .mint, .sky][index].color
-        Circle()
-          .fill(RadialGradient(colors: [
-            color.opacity(intensity * (border ? 0.92 : (colorScheme == .dark ? 0.32 : 0.42))),
-            color.opacity(intensity * (border ? 0.22 : 0.08)), .clear,
-          ], center: .center, startRadius: 0, endRadius: 82))
-          .frame(width: 164, height: 164)
-          .position(x: index == 0 || index == 3 ? 16 : size.width - 16,
-            y: index < 2 ? 16 : size.height - 16)
-      }
-    }
   }
 }
 
