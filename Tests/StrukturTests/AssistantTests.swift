@@ -69,6 +69,34 @@ final class AssistantTests: XCTestCase {
     XCTAssertEqual(restored.preferences.assistant?.model, "custom-model")
   }
 
+  func testAssistantDragClampsAndSettlesFromItsVisibleLocation() {
+    for width: CGFloat in [829, 1249] {
+      let left = AssistantPanelPosition.left.centerX(in: width, panelWidth: 424)
+      let right = AssistantPanelPosition.right.centerX(in: width, panelWidth: 424)
+      for position in AssistantPanelPosition.allCases {
+        XCTAssertEqual(position.draggedCenterX(-10_000, in: width, panelWidth: 424), left)
+        XCTAssertEqual(position.draggedCenterX(10_000, in: width, panelWidth: 424), right)
+        XCTAssertEqual(position.destination(after: -10_000, in: width, panelWidth: 424), .left)
+        XCTAssertEqual(position.destination(after: 10_000, in: width, panelWidth: 424), .right)
+        XCTAssertEqual(position.destination(after: 3, in: width, panelWidth: 424), position)
+        XCTAssertEqual(position.destination(after: -3, in: width, panelWidth: 424), position)
+      }
+      XCTAssertEqual(AssistantPanelPosition.right.destination(after: -(right - left) / 2,
+        in: width, panelWidth: 424), .middle)
+      XCTAssertEqual(AssistantPanelPosition.left.draggedCenterX(25, in: width, panelWidth: 424), left + 25)
+      XCTAssertEqual(AssistantPanelPosition.left.destination(after: 25, in: width, panelWidth: 424), .left)
+    }
+  }
+
+  func testAssistantDragPreservesPreferenceWhenAllPositionsCoincide() {
+    for position in AssistantPanelPosition.allCases {
+      for delta: CGFloat in [-100, 0, 100] {
+        XCTAssertEqual(position.destination(after: delta, in: 448, panelWidth: 424), position)
+        XCTAssertEqual(position.draggedCenterX(delta, in: 448, panelWidth: 424), 224)
+      }
+    }
+  }
+
   func testContextScopesExcludePrivateBodiesAndDeletedNotes() throws {
     let project = Project(name: "Study", color: .mint)
     store.add(project)

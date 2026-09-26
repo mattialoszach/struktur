@@ -14,6 +14,7 @@ struct AssistantPanel: View {
   @State private var showingContext = false
   @State private var editing: AssistantAction?
   @State private var composerFocused = false
+  @State private var hoveringHeader = false
 
   private var selected: [AssistantAction] { session.proposals.filter { session.selectedIDs.contains($0.id) } }
   private var conflictCount: Int { selected.filter { !store.assistantConflicts($0, among: selected).isEmpty }.count }
@@ -73,24 +74,28 @@ struct AssistantPanel: View {
   }
 
   private var header: some View {
-    HStack(spacing: 10) {
+    HStack(spacing: 4) {
       HStack(spacing: 8) {
         Image(systemName: "suit.diamond.fill").font(.system(size: 14))
           .foregroundStyle(StrukturTheme.muted)
-        Text("Assistant").font(.strukturSerif(20, weight: .medium))
+        Text("Assistant").font(.strukturSerif(20, weight: .medium)).foregroundStyle(StrukturTheme.ink)
           .fixedSize(horizontal: true, vertical: false)
-        Image(systemName: "line.3.horizontal").font(.system(size: 10))
-          .foregroundStyle(StrukturTheme.muted)
         Spacer(minLength: 0)
+        Image(systemName: "line.3.horizontal").font(.system(size: 10, weight: .medium))
+          .foregroundStyle(StrukturTheme.muted.opacity(hoveringHeader ? 1 : 0.55))
       }
-      .frame(maxWidth: .infinity, minHeight: 24, maxHeight: 24, alignment: .leading)
+      .padding(.horizontal, 8)
+      .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30, alignment: .leading)
+      .background(hoveringHeader ? StrukturTheme.hairline.opacity(0.5) : .clear,
+        in: RoundedRectangle(cornerRadius: 6))
       .contentShape(Rectangle())
       .overlay {
         NativeDragSurface(began: { _ in composerFocused = false }, changed: moveChanged,
           ended: { delta, _ in moveEnded(delta); composerFocused = true },
           cancelled: { moveCancelled(); composerFocused = true })
       }
-      .help("Drag to move assistant left, middle, or right")
+      .onHover { hoveringHeader = $0 }
+      .help("Drag to move assistant left, middle, or right · Escape to cancel")
       .accessibilityElement(children: .ignore)
       .accessibilityLabel("Move assistant")
       .accessibilityValue("Position: \(position.title)")
@@ -109,27 +114,28 @@ struct AssistantPanel: View {
           }
         }
       } label: {
-        Image(systemName: "rectangle.split.3x1").frame(width: 18, height: 22)
+        Image(systemName: "rectangle.split.3x1").frame(width: 26, height: 26)
       }
       .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
       .help("Move assistant")
       .accessibilityLabel("Assistant position")
       .accessibilityIdentifier("assistant.position")
-      Button { session.reset(); composerFocused = true } label: { Image(systemName: "square.and.pencil") }
-        .help("New conversation").accessibilityLabel("New conversation")
-      Button { showingSettings = true } label: { Image(systemName: "slider.horizontal.3") }
-        .help("Assistant settings").accessibilityLabel("Assistant settings")
+      IconButton(icon: "square.and.pencil", label: "New conversation") {
+        session.reset(); composerFocused = true
+      }
+      IconButton(icon: "slider.horizontal.3", label: "Assistant settings") { showingSettings = true }
         .disabled(session.isPreview)
-      Button(action: close) { Image(systemName: "xmark") }
-        .help("Close assistant · ⌘ J").accessibilityLabel("Close assistant")
+      IconButton(icon: "xmark", label: "Close assistant") { close() }
+        .help("Close assistant · ⌘ J")
         .keyboardShortcut(.cancelAction)
     }
-    .buttonStyle(.plain).font(.system(size: 13)).padding(18)
+    .buttonStyle(.plain).font(.system(size: 11, weight: .medium))
+    .foregroundStyle(StrukturTheme.muted).padding(12)
   }
 
   private var contextInfo: some View {
-    Button { showingContext = true } label: { Image(systemName: "info.circle") }
-      .buttonStyle(.plain).help("What the assistant sees").accessibilityLabel("Inspect shared context")
+    IconButton(icon: "info.circle", label: "Inspect shared context") { showingContext = true }
+      .help("What the assistant sees")
       .popover(isPresented: $showingContext) {
         VStack(alignment: .leading, spacing: 12) {
           Text("Relevant context, automatically").font(.strukturSerif(19))

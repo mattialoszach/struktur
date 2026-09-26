@@ -24,6 +24,22 @@ enum AssistantPanelPosition: String, Codable, CaseIterable, Identifiable, Sendab
         < abs($1.centerX(in: availableWidth, panelWidth: panelWidth, margin: margin) - centerX)
     } ?? .right
   }
+
+  func draggedCenterX(_ translation: CGFloat, in availableWidth: CGFloat, panelWidth: CGFloat) -> CGFloat {
+    let left = Self.left.centerX(in: availableWidth, panelWidth: panelWidth)
+    let right = Self.right.centerX(in: availableWidth, panelWidth: panelWidth)
+    return min(right, max(left, centerX(in: availableWidth, panelWidth: panelWidth) + translation))
+  }
+
+  func destination(after translation: CGFloat, in availableWidth: CGFloat, panelWidth: CGFloat) -> Self {
+    let left = Self.left.centerX(in: availableWidth, panelWidth: panelWidth)
+    let right = Self.right.centerX(in: availableWidth, panelWidth: panelWidth)
+    // Clicking the title or fitting the panel into a narrow area must not change
+    // the saved preference just because multiple anchors coincide.
+    guard abs(translation) >= 4, right > left else { return self }
+    return Self.nearest(to: draggedCenterX(translation, in: availableWidth, panelWidth: panelWidth),
+      in: availableWidth, panelWidth: panelWidth)
+  }
 }
 
 struct AssistantPreferences: Codable, Equatable, Sendable {

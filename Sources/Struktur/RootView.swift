@@ -17,7 +17,6 @@ struct RootView: View {
   @State private var referenceNotFound = false
   @StateObject private var assistant = AssistantSession.forLaunch()
   @State private var showingAssistant = false
-  @State private var assistantDragX: CGFloat = 0
   private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
   init(initialSection: AppSection = .overview) {
@@ -39,7 +38,8 @@ struct RootView: View {
           .overlay {
             if showingAssistant {
               GeometryReader { geometry in
-                assistantPanel(in: geometry.size)
+                AssistantPanelHost(session: assistant, anchor: selectedDate, size: geometry.size,
+                  close: toggleAssistant)
               }
               .transition(.opacity)
             }
@@ -202,48 +202,9 @@ struct RootView: View {
 
   private func toggleAssistant() {
     if showingAssistant && assistant.isWorking { assistant.stop() }
-    assistantDragX = 0
     withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { showingAssistant.toggle() }
   }
 
-  private var assistantPosition: AssistantPanelPosition {
-    (store.preferences.assistant ?? AssistantPreferences()).position
-  }
-
-  private func assistantPanel(in size: CGSize) -> some View {
-    let width = min(424, max(0, size.width - 24))
-    let baseX = assistantPosition.centerX(in: size.width, panelWidth: width)
-    return AssistantPanel(session: assistant, anchor: selectedDate, position: assistantPosition,
-      close: toggleAssistant, moveChanged: { delta in
-        assistantDragX = clampedAssistantX(baseX + delta.width, in: size.width, panelWidth: width) - baseX
-      }, moveEnded: { delta in
-        let center = clampedAssistantX(baseX + delta.width, in: size.width, panelWidth: width)
-        moveAssistant(to: .nearest(to: center, in: size.width, panelWidth: width))
-        assistantDragX = 0
-      }, moveCancelled: {
-        assistantDragX = 0
-      }, moveTo: moveAssistant)
-      .frame(width: width, height: max(0, size.height - 24))
-      .position(x: baseX + assistantDragX, y: size.height / 2)
-  }
-
-  private func clampedAssistantX(_ center: CGFloat, in availableWidth: CGFloat,
-    panelWidth: CGFloat) -> CGFloat {
-    let left = AssistantPanelPosition.left.centerX(in: availableWidth, panelWidth: panelWidth)
-    let right = AssistantPanelPosition.right.centerX(in: availableWidth, panelWidth: panelWidth)
-    return min(right, max(left, center))
-  }
-
-  private func moveAssistant(to position: AssistantPanelPosition) {
-    guard assistantPosition != position else { return }
-    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
-      store.updatePreferences {
-        var settings = $0.assistant ?? AssistantPreferences()
-        settings.position = position
-        $0.assistant = settings
-      }
-    }
-  }
 }
 
 extension QuickCaptureKind: Identifiable {
