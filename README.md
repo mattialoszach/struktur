@@ -34,9 +34,9 @@ Notes autosave locally and export to Markdown or PDF. In the Focus room, a timer
 
 ## A hand when you need one
 
-Open **Assistant** with **⌘J** to get a day brief, work through a note, or draft tasks and calendar blocks. Review and edit proposed items before adding them. Drag the header to place the panel on the left, in the middle, or on the right; its border glows softly while it thinks.
+Open **Assistant** with **⌘J** to get a day brief, work through a note, or draft tasks and calendar blocks. Review and edit proposed items before adding them. Drag the header to place the panel on the left, in the middle, or on the right. A small activity indicator shows when it is thinking.
 
-![Struktur in dark mode with the Assistant’s pastel thinking border](Documentation/Images/assistant-dark.png)
+![Struktur in dark mode with the Assistant open](Documentation/Images/assistant-dark.png)
 
 Apple's on-device model is the default on compatible Macs running macOS 26 or later. OpenAI is optional and uses your own API key. The app never switches to the cloud automatically. [Setup, privacy, and limits →](Documentation/Assistant.md)
 

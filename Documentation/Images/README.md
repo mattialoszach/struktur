@@ -1,6 +1,6 @@
 # App screenshots
 
-Captured from Struktur on 27 September 2026 with `scripts/capture-demos.sh`.
+Captured from Struktur on 27 September 2026 using the isolated preview setup in `scripts/capture-demos.sh`. The dark Assistant capture was refreshed after replacing its colored glow with the neutral panel outline and native thinking indicator.
 
 | File | View | Size |
 | --- | --- | --- |

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AssistantPanel: View {
   @EnvironmentObject private var store: WorkspaceStore
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @ObservedObject var session: AssistantSession
   let anchor: Date
   let position: AssistantPanelPosition
@@ -35,9 +36,6 @@ struct AssistantPanel: View {
     .clipShape(RoundedRectangle(cornerRadius: 18))
     .overlay {
       RoundedRectangle(cornerRadius: 18).strokeBorder(StrukturTheme.hairline)
-    }
-    .overlay {
-      if session.isWorking { AssistantWorkingGlow() }
     }
     .shadow(color: .black.opacity(0.12), radius: 20, x: -4, y: 8)
     .foregroundStyle(StrukturTheme.ink)
@@ -168,8 +166,16 @@ struct AssistantPanel: View {
           }
           if session.isWorking {
             HStack(spacing: 10) {
-              ProgressView().controlSize(.small)
-              Text("Thinking it through…").font(.system(size: 12)).foregroundStyle(StrukturTheme.muted)
+              Group {
+                if reduceMotion {
+                  Image(systemName: "suit.diamond.fill")
+                    .font(.system(size: 9)).foregroundStyle(StrukturTheme.muted)
+                } else {
+                  ProgressView().controlSize(.small)
+                }
+              }
+              .frame(width: 14, height: 14).accessibilityHidden(true)
+              Text("Thinking…").font(.system(size: 12)).foregroundStyle(StrukturTheme.muted)
               Spacer()
               Button("Stop") { session.stop() }.buttonStyle(.plain)
             }.accessibilityElement(children: .contain)
@@ -363,35 +369,6 @@ struct AssistantPanel: View {
   }
   private func refreshConnection() {
     session.refreshConnection(preferences: store.preferences.assistant ?? AssistantPreferences())
-  }
-}
-
-private struct AssistantWorkingGlow: View {
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.colorScheme) private var colorScheme
-
-  var body: some View {
-    TimelineView(.animation(minimumInterval: 1.0 / 24, paused: reduceMotion)) { timeline in
-      let phase = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate * 2 * .pi / 10
-      let gradient = AngularGradient(
-        colors: [AccentToken.lilac, .peach, .butter, .mint, .sky, .lilac].map(\.color),
-        center: UnitPoint(x: 0.5 + 0.12 * sin(phase * 0.7), y: 0.5 + 0.12 * cos(phase * 0.9)),
-        angle: .radians(phase.truncatingRemainder(dividingBy: 2 * .pi)))
-      let outline = RoundedRectangle(cornerRadius: 18)
-      // Every edge stays lit. The gradient drifts and changes shape gently, while
-      // the crisp inner line keeps the panel's silhouette clear in either theme.
-      ZStack {
-        outline.strokeBorder(gradient, lineWidth: 8)
-          .blur(radius: 5)
-          .opacity(colorScheme == .dark ? 0.5 : 0.42)
-        outline.strokeBorder(gradient, lineWidth: 3.5)
-          .blur(radius: 1.5).opacity(0.65)
-        outline.strokeBorder(gradient, lineWidth: 1.5)
-      }
-      .opacity(reduceMotion ? 0.9 : 0.9 + 0.1 * sin(phase * 1.6))
-    }
-    .allowsHitTesting(false)
-    .accessibilityHidden(true)
   }
 }
 
