@@ -3,6 +3,7 @@
 # access for the UI helper. No personal workspace, API key, or Apple exchange is used.
 set -euo pipefail
 cd "${0:A:h:h}"
+command -v cwebp >/dev/null || { print -u2 "cwebp is required to capture README screenshots (brew install webp)."; exit 1; }
 swift build
 STRUKTUR_CAPTURE_TEMP=$(mktemp -d /tmp/struktur-demos.XXXXXX)
 STRUKTUR_CAPTURE_PID=""
@@ -44,11 +45,13 @@ capture() {
     sleep 0.1
   done
   [[ -s "$snapshot" ]] || { print -u2 "No updated snapshot for $name"; return 1; }
-  cp "$snapshot" "Documentation/Images/$name.png"
+  local encoded="$STRUKTUR_CAPTURE_TEMP/$name.webp"
+  cwebp -quiet -lossless -m 6 "$snapshot" -o "$encoded"
+  mv "$encoded" "Documentation/Images/$name.webp"
   kill "$STRUKTUR_CAPTURE_PID"
   wait "$STRUKTUR_CAPTURE_PID" 2>/dev/null || true
   STRUKTUR_CAPTURE_PID=""
-  print "Saved Documentation/Images/$name.png"
+  print "Saved Documentation/Images/$name.webp"
 }
 
 capture dashboard-light light overview '' 1460 1060

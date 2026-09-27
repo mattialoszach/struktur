@@ -4,7 +4,7 @@ Your schedule, tasks, and notes, together on your Mac.
 
 Struktur is a native macOS organizer for studying, project work, and everything around it. See what's planned, keep deadlines separate from time set aside to work, and find a place for the ideas you want to come back to.
 
-![Struktur’s light dashboard, with a day timeline, tasks, focus timer, and deadlines](Documentation/Images/dashboard-light.png)
+![Struktur’s light dashboard, with a day timeline, tasks, focus timer, and deadlines](Documentation/Images/dashboard-light.webp)
 
 Built with SwiftUI and AppKit. macOS 15+. No third-party dependencies or analytics.
 
@@ -20,7 +20,7 @@ Spaces keep coursework, projects, and personal plans together. Each has its own 
 
 A deadline tells you when something is due. A calendar block tells you when you'll work on it. Struktur keeps both visible, with start and end times, overlaps, and the gaps between commitments.
 
-![Light calendar view showing scheduled work and time between appointments](Documentation/Images/calendar-light.png)
+![Light calendar view showing scheduled work and time between appointments](Documentation/Images/calendar-light.webp)
 
 Switch between day, week, month, and agenda views. Drag a task onto the calendar to schedule it, repeat a class or meeting, and link a task to the block it belongs to.
 
@@ -28,7 +28,7 @@ Switch between day, week, month, and agenda views. Drag a task onto the calendar
 
 Organize notes in folders, pin the ones you use often, and search across the library. Write in Markdown, add images and highlights, or switch to Preview for a clean reading view. Links can connect a note directly to a task, event, space, or goal.
 
-![Light Notes library with folders, a highlighted passage, and a lecture checklist](Documentation/Images/notes-light.png)
+![Light Notes library with folders, a highlighted passage, and a lecture checklist](Documentation/Images/notes-light.webp)
 
 Notes autosave locally and export to Markdown or PDF. In the Focus room, a timer and working notepad sit together; each saved session keeps its own copy of the notes.
 
@@ -36,7 +36,7 @@ Notes autosave locally and export to Markdown or PDF. In the Focus room, a timer
 
 Open **Assistant** with **⌘J** to get a day brief, work through a note, or draft tasks and calendar blocks. Review and edit proposed items before adding them. Drag the header to place the panel on the left, in the middle, or on the right. While it thinks, a fine border slowly shifts between soft lilac, peach, and mint.
 
-![Struktur in dark mode with the Assistant open](Documentation/Images/assistant-dark.png)
+![Struktur in dark mode with the Assistant open](Documentation/Images/assistant-dark.webp)
 
 Apple's on-device model is the default on compatible Macs running macOS 26 or later. OpenAI is optional and uses your own API key. The app never switches to the cloud automatically. [Setup, privacy, and limits →](Documentation/Assistant.md)
 

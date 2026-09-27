@@ -23,7 +23,7 @@ The packaging script generates the icon, embeds the privacy manifest, and verifi
 ./scripts/capture-demos.sh
 ```
 
-This builds a debug app and captures four real app views into `Documentation/Images`: three in light mode and one in dark mode. It launches isolated sample workspaces and a simulated Assistant, with no API key, personal workspace, or Calendar/Reminders access. The UI helper needs macOS Accessibility permission. The calendar uses the debug-only `calendar-demo` fixture, which adds fictional appointments across the current week; dates follow the day of capture. Inspect the PNGs before committing them.
+This builds a debug app and captures four real app views as lossless WebP images in `Documentation/Images`: three in light mode and one in dark mode. Install `cwebp` (`brew install webp`) before running it. It launches isolated sample workspaces and a simulated Assistant, with no API key, personal workspace, or Calendar/Reminders access. The UI helper needs macOS Accessibility permission. The calendar uses the debug-only `calendar-demo` fixture, which adds fictional appointments across the current week; dates follow the day of capture. Inspect the images before committing them.
 
 ## Verification
 
