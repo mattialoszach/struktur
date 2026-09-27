@@ -25,6 +25,28 @@ extension WorkspaceStore {
         sample.preferences.appearance =
           ProcessInfo.processInfo.environment["STRUKTUR_THEME"] == "dark" ? .dark : .light
         sample.preferences.widgetLayout = WidgetConfiguration.starterLayout
+        if ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_FIXTURE"] == "calendar-demo" {
+          let week = store.weekStart(for: Date())
+          let blocks: [(Int, Int, String, Int, ItemKind, Double)] = [
+            (0, 9, "Design systems", 0, .lecture, 90),
+            (0, 13, "Library study", 0, .deepWork, 120),
+            (1, 10, "Research seminar", 0, .lecture, 120),
+            (1, 14, "Prototype review", 1, .meeting, 60),
+            (2, 9, "Product studio", 1, .deepWork, 120),
+            (2, 13, "Lunch with Maya", 2, .personal, 60),
+            (3, 10, "Interaction design", 0, .lecture, 90),
+            (3, 14, "Build the prototype", 1, .deepWork, 120),
+            (4, 9, "Weekly review", 1, .meeting, 60),
+            (4, 13, "Read & take notes", 0, .deepWork, 90),
+          ]
+          for (day, hour, title, projectIndex, kind, minutes) in blocks {
+            let start = week.adding(days: day).setting(hour: hour)
+            let project = sample.projects[projectIndex]
+            sample.calendarEntries.append(CalendarEntry(title: title, start: start,
+              end: start.addingTimeInterval(minutes * 60), kind: kind,
+              color: project.color, projectID: project.id))
+          }
+        }
         if ProcessInfo.processInfo.environment["STRUKTUR_PREVIEW_FIXTURE"] == "assistant-calendar" {
           let tomorrow = Date().adding(days: 1).setting(hour: 11)
           sample.calendarEntries.append(CalendarEntry(title: "Planning review", start: tomorrow,
