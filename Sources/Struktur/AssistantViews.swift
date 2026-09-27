@@ -37,6 +37,9 @@ struct AssistantPanel: View {
     .overlay {
       RoundedRectangle(cornerRadius: 18).strokeBorder(StrukturTheme.hairline)
     }
+    .overlay {
+      if session.isWorking { AssistantThinkingBorder() }
+    }
     .shadow(color: .black.opacity(0.12), radius: 20, x: -4, y: 8)
     .foregroundStyle(StrukturTheme.ink)
     .onAppear {
@@ -369,6 +372,33 @@ struct AssistantPanel: View {
   }
   private func refreshConnection() {
     session.refreshConnection(preferences: store.preferences.assistant ?? AssistantPreferences())
+  }
+}
+
+private struct AssistantThinkingBorder: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.colorScheme) private var colorScheme
+
+  var body: some View {
+    TimelineView(.animation(minimumInterval: 1.0 / 20, paused: reduceMotion)) { timeline in
+      let cycle = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 12) / 12
+      let blend = reduceMotion ? 0.25 : (1 - cos(cycle * 2 * .pi)) / 2
+      let outline = RoundedRectangle(cornerRadius: 18)
+      // Crossfade the colors within the same one-point card border. Its weight
+      // and opacity stay fixed, so activity never makes the panel flash or swell.
+      ZStack {
+        outline.strokeBorder(
+          LinearGradient(colors: [AccentToken.lilac.color, AccentToken.peach.color, AccentToken.mint.color],
+            startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+        outline.strokeBorder(
+          LinearGradient(colors: [AccentToken.mint.color, AccentToken.lilac.color, AccentToken.peach.color],
+            startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+          .opacity(blend)
+      }
+      .opacity(colorScheme == .dark ? 0.5 : 0.7)
+    }
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
   }
 }
 

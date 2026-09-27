@@ -34,7 +34,7 @@ Notes autosave locally and export to Markdown or PDF. In the Focus room, a timer
 
 ## A hand when you need one
 
-Open **Assistant** with **⌘J** to get a day brief, work through a note, or draft tasks and calendar blocks. Review and edit proposed items before adding them. Drag the header to place the panel on the left, in the middle, or on the right. A small activity indicator shows when it is thinking.
+Open **Assistant** with **⌘J** to get a day brief, work through a note, or draft tasks and calendar blocks. Review and edit proposed items before adding them. Drag the header to place the panel on the left, in the middle, or on the right. While it thinks, a fine border slowly shifts between soft lilac, peach, and mint.
 
 ![Struktur in dark mode with the Assistant open](Documentation/Images/assistant-dark.png)
 

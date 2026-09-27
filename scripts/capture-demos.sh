@@ -34,7 +34,16 @@ capture() {
     "$STRUKTUR_CAPTURE_TEMP/ui-check" "$STRUKTUR_CAPTURE_PID" replay-key return
   fi
   sleep 1
+  # A Retina capture can finish after the UI helper returns. Wait for the new
+  # file so we never copy the initial window instead of the requested state.
+  rm "$snapshot"
   "$STRUKTUR_CAPTURE_TEMP/ui-check" "$STRUKTUR_CAPTURE_PID" capture-now
+  for attempt in {1..100}; do
+    [[ -s "$snapshot" ]] && break
+    kill -0 "$STRUKTUR_CAPTURE_PID"
+    sleep 0.1
+  done
+  [[ -s "$snapshot" ]] || { print -u2 "No updated snapshot for $name"; return 1; }
   cp "$snapshot" "Documentation/Images/$name.png"
   kill "$STRUKTUR_CAPTURE_PID"
   wait "$STRUKTUR_CAPTURE_PID" 2>/dev/null || true
