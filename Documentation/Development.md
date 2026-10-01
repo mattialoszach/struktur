@@ -15,7 +15,7 @@ Build the local macOS application:
 open dist/Struktur.app
 ~~~
 
-The packaging script generates the icon, embeds the privacy manifest, and verifies an ad-hoc signature. Previous app builds are preserved in `dist`. Set `STRUKTUR_UNIVERSAL=1` to build both Apple Silicon and Intel slices. Public distribution requires your Apple Developer identity and approval; see [distribution instructions](Distribution.md).
+The packaging script generates the icon, embeds the privacy manifest and offline math/font resources, and verifies an ad-hoc signature. Previous app builds are preserved in `dist`. Set `STRUKTUR_UNIVERSAL=1` to build both Apple Silicon and Intel slices. Public distribution requires your Apple Developer identity and approval; see [distribution instructions](Distribution.md).
 
 ## README screenshots
 
@@ -23,7 +23,7 @@ The packaging script generates the icon, embeds the privacy manifest, and verifi
 ./scripts/capture-demos.sh
 ```
 
-This builds a debug app and captures four real app views as lossless WebP images in `Documentation/Images`: three in light mode and one in dark mode. Install `cwebp` (`brew install webp`) before running it. It launches isolated sample workspaces and a simulated Assistant, with no API key, personal workspace, or Calendar/Reminders access. The UI helper needs macOS Accessibility permission. The calendar uses the debug-only `calendar-demo` fixture, which adds fictional appointments across the current week; dates follow the day of capture. Inspect the images before committing them.
+This builds a debug app and captures four real app views as lossless WebP images in `Documentation/Images`: three in light mode and one in dark mode. Install `cwebp` (`brew install webp`) before running it. It launches isolated sample workspaces and a simulated Assistant, with no API key, personal workspace, or Calendar/Reminders access. The UI helper needs macOS Accessibility permission. The calendar uses the debug-only `calendar-demo` fixture, which adds fictional appointments across the current week; dates follow the day of capture. Inspect the images before committing them. Set `STRUKTUR_CAPTURE_ONLY=notes-light` (or another image name from the script) to refresh one image.
 
 ## Verification
 
@@ -31,7 +31,7 @@ This builds a debug app and captures four real app views as lossless WebP images
 swift test
 ~~~
 
-The suite currently has 199 checks: 195 run by default, and four require explicit opt-in for the live Apple model. Coverage includes persistence and migration, import backups, calendar recurrence and daylight-saving boundaries, task scheduling, dashboard layout, focus sessions, native Notes editing, and Assistant context, draft review, cancellation, undo, and panel positioning. The [verification log](Verification.md) records results and remaining limits.
+The suite currently has 210 checks: 206 run by default, and four require explicit opt-in for the live Apple model. Coverage includes persistence and migration, import backups, calendar recurrence and daylight-saving boundaries, task scheduling, dashboard layout, focus sessions, native live Markdown/LaTeX editing, and Assistant context, draft review, cancellation, undo, and panel positioning. The [verification log](Verification.md) records results and remaining limits.
 
 Four opt-in tests exercise the actual Apple model on a compatible Mac using only temporary sample data (no Calendar/Reminders access):
 

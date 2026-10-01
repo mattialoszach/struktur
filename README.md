@@ -6,7 +6,7 @@ Struktur is a native macOS organizer for studying, project work, and everything 
 
 ![Struktur’s light dashboard, with a day timeline, tasks, focus timer, and deadlines](Documentation/Images/dashboard-light.webp)
 
-Built with SwiftUI and AppKit. macOS 15+. No third-party dependencies or analytics.
+Built with SwiftUI and AppKit. macOS 15+. No analytics. Offline equation rendering uses the native [SwiftMath](https://github.com/mgriebling/SwiftMath) library.
 
 [Build & run](#build--run) · [User guide](Documentation/Guide.md) · [Assistant](Documentation/Assistant.md) · [Development](Documentation/Development.md)
 
@@ -26,11 +26,11 @@ Switch between day, week, month, and agenda views. Drag a task onto the calendar
 
 ## Keep your notes close
 
-Organize notes in folders, pin the ones you use often, and search across the library. Write in Markdown, add images and highlights, or switch to Preview for a clean reading view. Links can connect a note directly to a task, event, space, or goal.
+Organize notes in folders, pin the ones you use often, and search across the library. Markdown formats as you type in one native editor. Add images and highlights, toggle checklists, and write LaTeX equations that render live, entirely offline. Links can connect a note directly to a task, event, space, or goal.
 
 ![Light Notes library with folders, a highlighted passage, and a lecture checklist](Documentation/Images/notes-light.webp)
 
-Notes autosave locally and export to Markdown or PDF. In the Focus room, a timer and working notepad sit together; each saved session keeps its own copy of the notes.
+Notes autosave locally and export to Markdown or PDF, including rendered equations. Move into formatted text to edit its syntax; click an equation to edit it with its result updating underneath. In the Focus room, a timer and working notepad sit together; each saved session keeps its own copy of the notes.
 
 ## A hand when you need one
 
