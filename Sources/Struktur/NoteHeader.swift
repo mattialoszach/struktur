@@ -9,7 +9,6 @@ struct NoteHeader: View {
   var exportPDF: (NoteDocument) -> Void
   var confirmDeletion: () -> Void
   private var noteID: UUID { note.id }
-  private var preview: Bool { store.noteLibrary.preview }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
@@ -20,15 +19,6 @@ struct NoteHeader: View {
         )
         .lineLimit(2)
         Spacer()
-        StrukturOptions(
-          label: "Note mode",
-          selection: Binding(
-            get: { preview },
-            set: { value in
-              store.updateNoteLibrary { $0.preview = value }
-            }), options: [false, true]
-        ) { $0 ? "Preview" : "Write" }.frame(width: 150)
-          .disabled(note.deletedAt != nil)
         Menu {
           Button(note.isPinned ? "Unpin note" : "Pin note", systemImage: "pin") {
             store.editNote(noteID) { $0.isPinned.toggle() }

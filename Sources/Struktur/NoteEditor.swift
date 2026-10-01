@@ -16,7 +16,10 @@ import UniformTypeIdentifiers
     guard let view = textView else { return }
     let range = view.selectedRange()
     view.window?.makeFirstResponder(view)
+    // Toolbar commands are discrete edits, not a continuation of native typing.
+    view.breakUndoCoalescing()
     view.insertText(text, replacementRange: range)
+    view.breakUndoCoalescing()
     if let offset = selectOffset {
       view.setSelectedRange(NSRange(location: range.location + offset, length: selectLength))
     }
@@ -67,10 +70,12 @@ import UniformTypeIdentifiers
 
 struct NoteNativeEditor: NSViewRepresentable {
   let note: NoteDocument
-  var preview: Bool
+  var readOnly: Bool
   var availableWidth: CGFloat
   let controller: NoteEditorController
   var editingEnabled = true
+  var acceptsImages = true
+  var accessibilityLabel = "Note editor"
   var currentNote: (() -> NoteDocument?)? = nil
   var onText: (NoteDocument) -> Void
   var onImage: (Data, String) -> Void
@@ -83,7 +88,7 @@ struct NoteNativeEditor: NSViewRepresentable {
     scroll.wantsLayer = true
     scroll.hasVerticalScroller = true
     scroll.drawsBackground = false
-    let text = NoteTextView(usingTextLayoutManager: !preview)
+    let text = NoteTextView(usingTextLayoutManager: true)
     text.wantsLayer = true
     text.isRichText = false
     text.allowsUndo = true
@@ -101,7 +106,8 @@ struct NoteNativeEditor: NSViewRepresentable {
     text.isHorizontallyResizable = false
     text.autoresizingMask = [.width]
     text.textContainer?.widthTracksTextView = true
-    if preview { text.layoutManager?.allowsNonContiguousLayout = true }
+    text.usesFindBar = true
+    text.isIncrementalSearchingEnabled = true
     text.textContainer?.containerSize = NSSize(width: 460, height: CGFloat.greatestFiniteMagnitude)
     text.minSize = .zero
     text.maxSize = NSSize(
@@ -115,25 +121,29 @@ struct NoteNativeEditor: NSViewRepresentable {
   func updateNSView(_ scroll: NSScrollView, context: Context) {
     guard let view = scroll.documentView as? NoteTextView else { return }
     context.coordinator.parent = self
-    if !preview { controller.textView = view }
-    view.imageHandler = preview ? nil : onImage
-    view.isEditable = !preview && editingEnabled
-    view.isSelectable = preview || editingEnabled
-    view.setAccessibilityLabel(preview ? "Note preview" : "Markdown note editor")
+    if !readOnly { controller.textView = view }
+    view.imageHandler = readOnly || !acceptsImages ? nil : onImage
+    view.isEditable = !readOnly && editingEnabled
+    view.isSelectable = readOnly || editingEnabled
+    view.setAccessibilityLabel(accessibilityLabel)
+    view.setAccessibilityHelp(
+      "Live Markdown and LaTeX. Click an equation to edit its source. Command-Return toggles a checklist item."
+    )
     let dark = colorScheme == .dark
     view.insertionPointColor = dark ? .white : .black
     context.coordinator.synchronize(view, dark: dark)
   }
   @MainActor
-  final class Coordinator: NSObject, NSTextViewDelegate {
+  final class Coordinator: NSObject, NSTextViewDelegate, NSTextLayoutManagerDelegate {
     var parent: NoteNativeEditor
     var lastNote: NoteDocument?
     var lastDark = false
-    var lastPreview = false
+    var lastReadOnly = false
     var lastWidth: CGFloat = 0
     var applying = false
     let styler = NoteWriteStyle()
     var pendingEdit: (range: NSRange, delta: Int)?
+    var inheritedAttributes: [NSAttributedString.Key: Any]?
     var multipleEdits = false
     var needsFullStyle = false
     weak var editingView: NoteTextView?
@@ -158,6 +168,7 @@ struct NoteNativeEditor: NSViewRepresentable {
 
     func synchronize(_ view: NoteTextView, dark: Bool) {
       editingView = view
+      view.textLayoutManager?.delegate = self
       if observedStorage !== view.textStorage {
         if let observedStorage {
           NotificationCenter.default.removeObserver(
@@ -176,31 +187,37 @@ struct NoteNativeEditor: NSViewRepresentable {
         lastNote?.id == note.id
         && (lastNote?.markdown as NSString?)?.isEqual(to: note.markdown) == true
         && lastNote?.decorations == note.decorations
-        && (!parent.preview || lastNote?.attachments == note.attachments)
-      guard
-        !sameContent || needsFullStyle || lastDark != dark || lastPreview != parent.preview
-          || (parent.preview && lastWidth != parent.availableWidth)
-      else { return }
+        && lastNote?.attachments == note.attachments
+      if sameContent, !needsFullStyle, lastDark == dark, lastReadOnly == parent.readOnly {
+        if lastWidth != parent.availableWidth, let storage = view.textStorage {
+          applying = true
+          view.textContentStorage?.performEditingTransaction {
+            styler.resize(
+              in: storage, note: note, dark: dark, width: max(80, parent.availableWidth - 50))
+          }
+          resetTypingAttributes(view, dark: dark)
+          view.needsDisplay = true
+          applying = false
+          lastWidth = parent.availableWidth
+        }
+        return
+      }
       applying = true
       defer { applying = false }
       guard let storage = view.textStorage else { return }
       let selection = view.selectedRange()
       let scrollOrigin = view.enclosingScrollView?.contentView.bounds.origin
-      if parent.preview {
-        storage.setAttributedString(
-          NoteRendering.attributed(
-            note, preview: true, dark: dark,
-            width: max(160, parent.availableWidth - 40)))
-      } else {
-        if !(view.string as NSString).isEqual(to: note.markdown) {
-          // External replacements (import/checklist edits) invalidate text undo;
-          // ordinary typing never comes through this path.
-          storage.replaceCharacters(
-            in: NSRange(location: 0, length: storage.length), with: note.markdown)
-          view.undoManager?.removeAllActions()
-        }
-        styler.apply(to: storage, note: note, dark: dark)
+      if !(view.string as NSString).isEqual(to: note.markdown) {
+        // Only external replacements invalidate text undo. Live presentation
+        // never replaces, inserts or removes source characters.
+        storage.replaceCharacters(
+          in: NSRange(location: 0, length: storage.length), with: note.markdown)
+        view.undoManager?.removeAllActions()
       }
+      styler.apply(
+        to: storage, note: note, dark: dark,
+        selection: parent.readOnly ? NSRange(location: NSNotFound, length: 0) : selection,
+        width: max(80, parent.availableWidth - 50))
       resetTypingAttributes(view, dark: dark)
       let location = min(selection.location, storage.length)
       view.setSelectedRange(
@@ -209,7 +226,7 @@ struct NoteNativeEditor: NSViewRepresentable {
       lastNote = note
       lastDark = dark
       lastWidth = parent.availableWidth
-      lastPreview = parent.preview
+      lastReadOnly = parent.readOnly
       pendingEdit = nil
       multipleEdits = false
       needsFullStyle = false
@@ -227,12 +244,24 @@ struct NoteNativeEditor: NSViewRepresentable {
       if pendingEdit != nil { multipleEdits = true }
       pendingEdit = (storage.editedRange, storage.changeInLength)
     }
+    func textView(
+      _ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange,
+      replacementString: String?
+    ) -> Bool {
+      inheritedAttributes = nil
+      if !textView.hasMarkedText(), lastNote?.decorations.isEmpty == true,
+        let replacementString, let storage = textView.textStorage
+      {
+        inheritedAttributes = styler.inheritedAttributes(
+          in: storage, range: affectedCharRange, replacement: replacementString)
+      }
+      return true
+    }
     func textDidChange(_ notification: Notification) {
       guard !applying, let view = notification.object as? NoteTextView,
         let storage = view.textStorage
       else { return }
       var note = lastNote ?? parent.note
-      let hadDecorations = !note.decorations.isEmpty
       note.replaceMarkdown(
         view.string, editedRange: multipleEdits ? nil : pendingEdit?.range,
         changeInLength: pendingEdit?.delta ?? 0)
@@ -240,14 +269,20 @@ struct NoteNativeEditor: NSViewRepresentable {
       // untouched. Its accumulated style changes are applied after commit.
       if !view.hasMarkedText() {
         applying = true
-        if hadDecorations || !note.decorations.isEmpty || needsFullStyle {
+        do {
           let range = multipleEdits || needsFullStyle ? nil : pendingEdit?.range
           if let content = view.textContentStorage {
             content.performEditingTransaction {
-              styler.apply(to: storage, note: note, dark: lastDark, editedRange: range)
+              styler.apply(
+                to: storage, note: note, dark: lastDark, editedRange: range,
+                selection: view.selectedRange(), width: max(80, parent.availableWidth - 50),
+                inheritedAttributes: multipleEdits || needsFullStyle ? nil : inheritedAttributes)
             }
           } else {
-            styler.apply(to: storage, note: note, dark: lastDark, editedRange: range)
+            styler.apply(
+              to: storage, note: note, dark: lastDark, editedRange: range,
+              selection: view.selectedRange(), width: max(80, parent.availableWidth - 50),
+              inheritedAttributes: multipleEdits || needsFullStyle ? nil : inheritedAttributes)
           }
           resetTypingAttributes(view, dark: lastDark)
           view.needsDisplay = true
@@ -260,15 +295,40 @@ struct NoteNativeEditor: NSViewRepresentable {
       lastNote = note
       pendingEdit = nil
       multipleEdits = false
+      inheritedAttributes = nil
       parent.onText(note)
     }
     func textViewDidChangeSelection(_ notification: Notification) {
-      guard !applying, !parent.preview, let view = notification.object as? NSTextView else {
+      guard !applying, !parent.readOnly, let view = notification.object as? NSTextView else {
         return
       }
       let range = view.selectedRange()
+      if pendingEdit == nil, !view.hasMarkedText(), let storage = view.textStorage,
+        let note = lastNote
+      {
+        applying = true
+        view.textContentStorage?.performEditingTransaction {
+          styler.select(
+            range, in: storage, note: note, dark: lastDark,
+            width: max(80, parent.availableWidth - 50))
+        }
+        resetTypingAttributes(view, dark: lastDark)
+        applying = false
+        view.needsDisplay = true
+      }
       let controller = parent.controller
       DispatchQueue.main.async { if controller.selection != range { controller.selection = range } }
+    }
+    nonisolated func textLayoutManager(
+      _ manager: NSTextLayoutManager,
+      textLayoutFragmentFor location: any NSTextLocation, in element: NSTextElement
+    ) -> NSTextLayoutFragment {
+      if let paragraph = element as? NSTextParagraph, paragraph.attributedString.length > 0,
+        paragraph.attributedString.attribute(.noteCustomLayout, at: 0, effectiveRange: nil) != nil
+      {
+        return NoteLayoutFragment(textElement: element, range: element.elementRange)
+      }
+      return NSTextLayoutFragment(textElement: element, range: element.elementRange)
     }
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
       if let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:)) {
@@ -322,7 +382,55 @@ final class NoteTextView: NSTextView {
     }
     return false
   }
+  override func mouseDown(with event: NSEvent) {
+    if isEditable, let storage = textStorage, storage.length > 0 {
+      let point = convert(event.locationInWindow, from: nil)
+      let index = min(characterIndexForInsertion(at: point), storage.length - 1)
+      var range = NSRange()
+      if let visual = storage.attribute(
+        .noteVisualSource, at: index, longestEffectiveRange: &range,
+        in: NSRange(location: 0, length: storage.length)) as? NoteInlineVisual
+      {
+        if visual.kind == .checkbox {
+          window?.makeFirstResponder(self)
+          toggleChecklist(at: range.location)
+          return
+        }
+        if visual.kind == .math || visual.kind == .image {
+          window?.makeFirstResponder(self)
+          setSelectedRange(NSRange(location: min(range.location + 1, storage.length), length: 0))
+          return
+        }
+      }
+    }
+    super.mouseDown(with: event)
+  }
+
+  @discardableResult func toggleChecklist(at location: Int? = nil) -> Bool {
+    let source = string as NSString
+    let line = source.lineRange(
+      for: NSRange(location: min(location ?? selectedRange().location, source.length), length: 0))
+    let raw = source.substring(with: line)
+    guard let item = MarkdownChecklist.item(in: raw) else { return false }
+    let marker = NSRange(item.markerRange, in: raw)
+    let range = NSRange(location: line.location + marker.location, length: marker.length)
+    let selection = selectedRange()
+    let replacement = item.isChecked ? "- [ ]" : "- [x]"
+    breakUndoCoalescing()
+    insertText(replacement, replacementRange: range)
+    breakUndoCoalescing()
+    let delta = replacement.utf16.count - range.length
+    let position =
+      selection.location >= NSMaxRange(range) ? selection.location + delta : selection.location
+    setSelectedRange(NSRange(location: min(position, (string as NSString).length), length: 0))
+    undoManager?.setActionName("Toggle checklist")
+    return true
+  }
+
   override func keyDown(with event: NSEvent) {
+    if event.modifierFlags.contains(.command), event.keyCode == 36, isEditable, toggleChecklist() {
+      return
+    }
     if event.modifierFlags.contains(.command), let key = event.charactersIgnoringModifiers,
       ["b", "i"].contains(key), isEditable
     {

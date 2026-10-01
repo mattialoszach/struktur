@@ -56,7 +56,7 @@ import XCTest
     let controller = NoteEditorController()
     let coordinator = NoteNativeEditor.Coordinator(
       NoteNativeEditor(
-        note: note, preview: false, availableWidth: 600, controller: controller,
+        note: note, readOnly: false, availableWidth: 600, controller: controller,
         onText: { store.updateNoteText($0) },
         onImage: { _, _ in }, onLink: { _ in }))
     let view = NoteTextView(usingTextLayoutManager: true)
@@ -71,7 +71,7 @@ import XCTest
       let start = Date()
       view.insertText("x", replacementRange: view.selectedRange())
       samples.append(Date().timeIntervalSince(start))
-      XCTAssertEqual(coordinator.styler.lastStyledLength, 1)
+      XCTAssertLessThan(coordinator.styler.lastStyledLength, 300)
     }
     XCTAssertEqual(store.note(note.id)?.markdown, view.string)
     XCTAssertEqual(notifications, 0, "Typing and saving status must not invalidate the workspace")
@@ -98,7 +98,7 @@ import XCTest
     XCTAssertEqual(note.decorations.first?.range, NSRange(location: 2, length: 2))
     let selection = view.selectedRange()
     coordinator.parent = NoteNativeEditor(
-      note: note, preview: false, availableWidth: 400,
+      note: note, readOnly: false, availableWidth: 400,
       controller: coordinator.parent.controller, onText: coordinator.parent.onText,
       onImage: { _, _ in }, onLink: { _ in })
     coordinator.synchronize(view, dark: false)
@@ -141,7 +141,7 @@ import XCTest
     let actual = NSMutableAttributedString(attributedString: try XCTUnwrap(view.textStorage))
     let expected = NSMutableAttributedString(attributedString: fresh)
     // TextKit 2 resolves CJK/emoji fallback fonts lazily at layout time.
-    for location in [0, 1, 10] {
+    for location in [0, 3, 10] {
       XCTAssertEqual(
         (actual.attribute(.font, at: location, effectiveRange: nil) as? NSFont)?.pointSize, 14)
     }
@@ -163,7 +163,7 @@ import XCTest
     XCTAssertTrue(
       view.needsDisplay, "Color edits must request paint without waiting for autosave/SwiftUI")
     XCTAssertNotNil(view.textLayoutManager)
-    XCTAssertEqual(coordinator.styler.lastStyledLength, 1)
+    XCTAssertLessThan(coordinator.styler.lastStyledLength, 300)
     XCTAssertEqual(note.decorations[0].length, 10)
     XCTAssertEqual(
       view.textStorage?.attribute(.backgroundColor, at: 3, effectiveRange: nil) as? NSColor,
@@ -241,7 +241,7 @@ import XCTest
     _ = NSApplication.shared
     let coordinator = NoteNativeEditor.Coordinator(
       NoteNativeEditor(
-        note: note, preview: false, availableWidth: 400, controller: NoteEditorController(),
+        note: note, readOnly: false, availableWidth: 400, controller: NoteEditorController(),
         onText: onText, onImage: { _, _ in }, onLink: { _ in }))
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
@@ -256,7 +256,7 @@ import XCTest
     return (window, view, coordinator)
   }
 
-  func testHostedEditorKeepsUndoAcrossAutosaveAndPreview() throws {
+  func testHostedEditorKeepsUndoAcrossAutosaveAndLegacyPreferences() throws {
     _ = NSApplication.shared
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -331,8 +331,8 @@ import XCTest
   func testMarkdownRenderingPreservesSourceAndStylesCompletedMarkdown() throws {
     let source =
       "# A **bold heading**\n**bold** *italic* _also italic_ ~~removed~~ `code`\n\\*literal*\n"
-    let rendered = NoteRendering.attributed(
-      NoteDocument(markdown: source), preview: false, dark: false)
+    let rendered = NSTextStorage(string: source)
+    NoteWriteStyle().apply(to: rendered, note: NoteDocument(markdown: source), dark: false)
     XCTAssertEqual(rendered.string, source)
     func font(_ text: String) throws -> NSFont {
       try XCTUnwrap(
@@ -391,7 +391,7 @@ import XCTest
     XCTAssertTrue(storage.isEqual(to: fresh))
   }
 
-  func testLongNoteEditsStyleOnlyInsertedCharacters() {
+  func testLongNoteEditsStyleOnlyAffectedParagraphs() {
     var note = NoteDocument(
       markdown: (0..<5000).map { "Paragraph \($0) with **bold** text.\n" }.joined())
     let storage = NSTextStorage(string: note.markdown)
@@ -406,7 +406,7 @@ import XCTest
       styler.apply(
         to: storage, note: note, dark: false,
         editedRange: NSRange(location: insertion.location, length: 1))
-      XCTAssertEqual(styler.lastStyledLength, 1)
+      XCTAssertLessThan(styler.lastStyledLength, 300)
     }
     print(
       "Notes: 100 incremental edits in a 5,000-paragraph note: \(Date().timeIntervalSince(start))s")
@@ -419,7 +419,7 @@ import XCTest
     let note = NoteDocument(markdown: "Before ")
     let controller = NoteEditorController()
     let editor = NoteNativeEditor(
-      note: note, preview: false, availableWidth: 400,
+      note: note, readOnly: false, availableWidth: 400,
       controller: controller, onText: { saved = $0.markdown }, onImage: { _, _ in },
       onLink: { _ in })
     let coordinator = NoteNativeEditor.Coordinator(editor)
@@ -443,7 +443,7 @@ import XCTest
     XCTAssertEqual(view.selectedRange(), NSRange(location: 15, length: 0))
     let font = try XCTUnwrap(
       view.textStorage?.attribute(.font, at: 9, effectiveRange: nil) as? NSFont)
-    XCTAssertFalse(NSFontManager.shared.traits(of: font).contains(.boldFontMask))
+    XCTAssertTrue(NSFontManager.shared.traits(of: font).contains(.boldFontMask))
     XCTAssertEqual(font.pointSize, 14)
     XCTAssertTrue(undo.canUndo)
     view.isEditable = false

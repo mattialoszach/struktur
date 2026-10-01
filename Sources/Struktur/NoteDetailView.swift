@@ -13,7 +13,6 @@ struct NoteDetailView: View {
   @State private var showingHelp = false
 
   private var note: NoteDocument? { store.note(noteID) }
-  private var preview: Bool { store.noteLibrary.preview }
   var body: some View {
     Group {
       if let note {
@@ -36,29 +35,14 @@ struct NoteDetailView: View {
               noteID: noteID, controller: controller,
               showLinks: { showingLinks = true }, chooseImage: chooseImage
             )
-            .disabled(preview).padding(.horizontal, 16).padding(.vertical, 8)
+            .padding(.horizontal, 16).padding(.vertical, 8)
           }
           GeometryReader { geometry in
-            ZStack {
-              NoteNativeEditor(
-                note: note, preview: false, availableWidth: geometry.size.width,
-                controller: controller,
-                editingEnabled: !preview && note.deletedAt == nil,
-                currentNote: { store.note(noteID) },
-                onText: { store.updateNoteText($0) },
-                onImage: insertImage, onLink: openLink
-              )
-              .opacity(preview || note.deletedAt != nil ? 0 : 1)
-              .allowsHitTesting(!preview && note.deletedAt == nil)
-              .accessibilityHidden(preview || note.deletedAt != nil)
-              if preview || note.deletedAt != nil {
-                NoteNativeEditor(
-                  note: note, preview: true, availableWidth: geometry.size.width,
-                  controller: controller,
-                  currentNote: { store.note(noteID) },
-                  onText: { _ in }, onImage: { _, _ in }, onLink: openLink)
-              }
-            }
+            NoteNativeEditor(
+              note: note, readOnly: note.deletedAt != nil, availableWidth: geometry.size.width,
+              controller: controller, editingEnabled: note.deletedAt == nil,
+              currentNote: { store.note(noteID) }, onText: { store.updateNoteText($0) },
+              onImage: insertImage, onLink: openLink)
           }
           Divider()
           HStack(spacing: 12) {
@@ -76,18 +60,18 @@ struct NoteDetailView: View {
               VStack(alignment: .leading, spacing: 12) {
                 Text("Write with Markdown").font(.strukturSerif(23))
                 Text(
-                  "Write uses plain text with stable line spacing. Markdown markers stay visible and editable; switch to Preview to see formatted headings, lists, and emphasis. Color and Highlight apply to selected text in both modes."
+                  "Markdown formats as you type. Move into formatted text to edit its syntax; move out to read it cleanly. Color and Highlight apply to selected text."
                 )
                 Text(
                   verbatim:
-                    "# Heading\n**Bold** · *Italic* · ~~Strikethrough~~\n- Bullet list\n1. Numbered list\n- [ ] Checklist\n> Quote\n`Code` or fenced ``` code blocks\n[Label](https://example.com)"
+                    "# Heading\n**Bold** · *Italic* · ~~Strikethrough~~\n- Bullet list\n1. Numbered list\n- [ ] Checklist\n> Quote\n`Code` or fenced ``` code blocks\n[Label](https://example.com)\n$E = mc^2$ · inline equation\n$$\n\\frac{a}{b}\n$$ · display equation"
                 )
                 .font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
                 Text(
-                  "⌘B / ⌘I format a selection. Return continues lists; Return on an empty item ends the list. Paste or drop an image into Write. Click checkboxes and links in Preview."
+                  "⌘B / ⌘I format a selection. Return continues lists; Return on an empty item ends the list. Paste or drop an image into the note. Click a checkbox (or press ⌘Return on its line) to toggle it. ⌘Click a link to open it. Click an equation to edit it, with the result updating below."
                 )
                 Text(
-                  "Colors and highlights are saved with the workspace and PDF. Markdown export contains plain source and local image files. Remote images are shown as labels; tables, HTML, and advanced Markdown extensions remain source text."
+                  "Colors and highlights are saved with the workspace and PDF. Markdown export contains plain source and local image files. Equations render offline. Incomplete or unsupported LaTeX stays editable as source. Remote images, tables, HTML, and advanced Markdown extensions remain source text."
                 )
               }.font(.callout).padding(22).frame(width: 420)
             }
@@ -117,11 +101,6 @@ struct NoteDetailView: View {
       Button("Delete permanently", role: .destructive) { store.permanentlyDeleteNote(noteID) }
     } message: {
       Text("The note and its images will be removed from this workspace. This cannot be undone.")
-    }
-    .onChange(of: preview) { _, reading in
-      if reading, let view = controller.textView, view.window?.firstResponder === view {
-        view.window?.makeFirstResponder(nil)
-      }
     }
     .onDisappear { store.saveNow() }
   }
@@ -153,7 +132,7 @@ struct NoteDetailView: View {
     } catch { self.error = error.localizedDescription }
   }
   private func insertImage(_ data: Data, _ name: String) {
-    guard let note, note.deletedAt == nil, !preview else { return }
+    guard let note, note.deletedAt == nil else { return }
     do {
       let image = try NoteImages.attachment(data, name: name)
       guard note.attachments.count < 100,
@@ -196,6 +175,8 @@ private struct NoteWordCount: View {
   var body: some View {
     Text(count.map { "\($0) words" } ?? "Counting words…")
       .task(id: note.updatedAt) {
+        try? await Task.sleep(for: .milliseconds(400))
+        guard !Task.isCancelled else { return }
         let source = note.markdown
         let task = Task.detached(priority: .utility) {
           var count = 0

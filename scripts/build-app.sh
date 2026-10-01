@@ -36,9 +36,10 @@ fi
 swift "$PROJECT_DIR/scripts/generate-icon.swift" "$PROJECT_DIR/.build/Struktur.iconset"
 iconutil -c icns "$PROJECT_DIR/.build/Struktur.iconset" -o "$CONTENTS_DIR/Resources/AppIcon.icns"
 cp "$PROJECT_DIR/Sources/Struktur/Resources/PrivacyInfo.xcprivacy" "$CONTENTS_DIR/Resources/"
-if [[ -d "$STRUKTUR_BIN_DIR/Struktur_Struktur.bundle" ]]; then
-    cp -R "$STRUKTUR_BIN_DIR/Struktur_Struktur.bundle" "$CONTENTS_DIR/Resources/"
-fi
+# Include SwiftPM resources for the app and the offline math fonts.
+for STRUKTUR_RESOURCE_BUNDLE in "$STRUKTUR_BIN_DIR/"*.bundle(N); do
+    cp -R "$STRUKTUR_RESOURCE_BUNDLE" "$CONTENTS_DIR/Resources/"
+done
 if [[ -n "${STRUKTUR_PROVISIONING_PROFILE:-}" ]]; then
     [[ -f "$STRUKTUR_PROVISIONING_PROFILE" ]] || { print -u2 "Provisioning profile not found."; exit 1; }
     cp "$STRUKTUR_PROVISIONING_PROFILE" "$CONTENTS_DIR/embedded.provisionprofile"

@@ -113,7 +113,6 @@ struct FocusPage: View {
 
 struct ScratchpadView: View {
   @EnvironmentObject private var store: WorkspaceStore
-  @State private var preview = false
   @State private var confirmingClear = false
 
   var body: some View {
@@ -126,8 +125,8 @@ struct ScratchpadView: View {
       }.frame(minHeight: 28)
       MarkdownComposer(
         text: Binding(get: { store.scratchpad }, set: { store.updateScratchpad($0) }),
-        showingPreview: $preview, title: "", editorHeight: 300,
-        showsLivePreview: false, showsHelp: false, editorLabel: "Focus notes editor")
+        title: "", editorHeight: 300,
+        showsHelp: false, editorLabel: "Focus notes editor")
       HStack(spacing: 6) {
         Image(systemName: store.lastSaveError != nil ? "exclamationmark.triangle" : "checkmark.circle")
         WorkspaceSaveIndicator(
@@ -153,7 +152,6 @@ struct FocusRecordSheet: View {
   let record: FocusRecord
   @State private var title: String
   @State private var notes: String
-  @State private var preview = true
   @State private var confirmingDeletion = false
 
   init(record: FocusRecord, store: WorkspaceStore) {
@@ -174,8 +172,9 @@ struct FocusRecordSheet: View {
           Text("This older session has no saved notes. You can add some here.")
             .font(.caption).foregroundStyle(StrukturTheme.muted)
         }
-        MarkdownComposer(text: $notes, showingPreview: $preview, editorHeight: 280,
-          showsLivePreview: false, showsHelp: false, editorLabel: "Saved session notes editor")
+        MarkdownComposer(
+          text: $notes, editorHeight: 280,
+          showsHelp: false, editorLabel: "Saved session notes editor")
       }.padding(20)
       Spacer(minLength: 0)
       Divider()

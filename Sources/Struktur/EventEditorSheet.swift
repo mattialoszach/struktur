@@ -4,7 +4,6 @@ struct EventEditorSheet: View {
   @EnvironmentObject private var store: WorkspaceStore
   @Environment(\.dismiss) private var dismiss
   @State private var draft: CalendarEntry
-  @State private var showingPreview = false
   @State private var editingTask: TaskItem?
   @State private var scope: CalendarEditScope = .occurrence
   @State private var confirmingDelete = false
@@ -74,7 +73,7 @@ struct EventEditorSheet: View {
               .foregroundStyle(StrukturTheme.muted)
           }
           TextField("Location or link", text: $draft.location).strukturInput()
-          MarkdownComposer(text: $draft.notes, showingPreview: $showingPreview)
+          MarkdownComposer(text: $draft.notes)
           if !isNew {
             let linked = store.tasks.filter { $0.linkedEventID == draft.id }
             if !linked.isEmpty {

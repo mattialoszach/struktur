@@ -135,6 +135,7 @@ struct NoteLibraryPreferences: Codable, Equatable {
   var selectedNoteID: UUID?
   var folderID: UUID?
   var expandedFolderIDs: [UUID] = []
+  // Retained for compatibility with existing workspace backups; editing is now live.
   var preview = false
 }
 

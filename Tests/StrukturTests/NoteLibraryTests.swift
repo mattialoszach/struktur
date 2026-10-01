@@ -232,11 +232,11 @@ import XCTest
     )
     note.attachments = [attachment]
     note.decorations = [NoteDecoration(location: 2, length: 7, color: .rose, highlight: true)]
-    let text = NoteRendering.attributed(note, preview: true, dark: false)
+    let text = NoteWriteStyle.attributedForExport(note, width: 460)
     XCTAssertTrue(text.string.contains("Heading\nBold and italic"))
     XCTAssertTrue(text.string.contains("**literal**"))
     XCTAssertTrue(text.string.contains("**also literal**"))
-    XCTAssertTrue(text.string.contains("☐ Check"))
+    XCTAssertTrue(text.string.contains("\u{fffc} Check"))
     XCTAssertNotNil(text.attribute(.backgroundColor, at: 0, effectiveRange: nil))
     let site = (text.string as NSString).range(of: "Site")
     XCTAssertEqual(
@@ -248,8 +248,10 @@ import XCTest
     text.enumerateAttribute(.attachment, in: NSRange(location: 0, length: text.length)) {
       value, _, _ in if value != nil { images += 1 }
     }
-    XCTAssertEqual(images, 1)
-    XCTAssertEqual(NoteRendering.attributed(note, preview: false, dark: true).string, note.markdown)
+    XCTAssertEqual(images, 2, "The checkbox and local image both render as attachments")
+    let live = NSTextStorage(string: note.markdown)
+    NoteWriteStyle().apply(to: live, note: note, dark: true)
+    XCTAssertEqual(live.string, note.markdown)
   }
 
   func testNativeListContinuationAndSelectionFormatting() {

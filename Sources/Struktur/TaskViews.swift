@@ -254,7 +254,6 @@ struct TaskEditorSheet: View {
   @State private var hasDueDate: Bool
   @State private var hasPlannedStart: Bool
   @State private var hasEstimate: Bool
-  @State private var showingPreview = false
   private let isNew: Bool
 
   private var linkableEntries: [CalendarEntry] {
@@ -380,7 +379,7 @@ struct TaskEditorSheet: View {
             }
           }
 
-          MarkdownComposer(text: $draft.notes, showingPreview: $showingPreview)
+          MarkdownComposer(text: $draft.notes)
 
           HStack(spacing: 10) {
             Text("Color").font(.caption).foregroundStyle(.secondary)
@@ -439,58 +438,6 @@ struct TaskEditorSheet: View {
       .frame(maxWidth: .infinity)
     }
   }
-}
-
-struct MarkdownComposer: View {
-  @Binding var text: String
-  @Binding var showingPreview: Bool
-  var title = "Notes"
-  var editorHeight: CGFloat = 160
-  var showsLivePreview = true
-  var showsHelp = true
-  var editorLabel = "Notes editor"
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      HStack {
-        if !title.isEmpty {
-          Label(title, systemImage: "text.alignleft").font(.caption.weight(.semibold))
-        }
-        Spacer()
-        StrukturOptions(label: "Mode", selection: $showingPreview, options: [false, true]) {
-          $0 ? "Preview" : "Write"
-        }.frame(width: 150)
-      }
-      Group {
-        if showingPreview {
-          ScrollView { MarkdownContent(text: $text).padding(12) }
-        } else {
-          GeometryReader { geometry in
-            HStack(spacing: 0) {
-              TextEditor(text: $text)
-                .font(.system(size: 12, design: .monospaced))
-                .scrollContentBackground(.hidden).padding(8)
-                .accessibilityLabel(editorLabel)
-              if showsLivePreview && geometry.size.width >= 600 {
-                Divider()
-                ScrollView { MarkdownContent(text: $text).padding(12) }
-                  .frame(maxWidth: .infinity)
-              }
-            }
-          }
-        }
-      }
-      .frame(height: editorHeight)
-      .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
-      if showsHelp {
-        Text(verbatim: "Markdown: **bold**, # headings, - [ ] checkboxes, [title](URL).")
-          .font(.caption2).foregroundStyle(StrukturTheme.muted)
-        Text("In Preview, click a checkbox to update the note. Note checklists are separate from tasks.")
-          .font(.caption2).foregroundStyle(StrukturTheme.muted)
-      }
-    }
-  }
-
 }
 
 struct SheetHeader: View {

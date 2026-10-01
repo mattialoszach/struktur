@@ -102,6 +102,12 @@ struct NoteEditorToolbar: View {
       Button("Code block") {
         controller.insert("\n```\ncode\n```\n", selectOffset: 5, selectLength: 4)
       }
+      Button("Inline equation") {
+        controller.insert("$x^2$", selectOffset: 1, selectLength: 3)
+      }
+      Button("Display equation") {
+        controller.insert("\n$$\n\\frac{a}{b}\n$$\n", selectOffset: 4, selectLength: 11)
+      }
       Button("Divider") { controller.insert("\n\n---\n\n") }
       Divider()
       Button("Web link") {

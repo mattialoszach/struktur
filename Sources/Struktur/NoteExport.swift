@@ -47,7 +47,7 @@ import CoreGraphics
         .foregroundColor: NSColor.black,
       ])
     content.append(
-      NoteRendering.attributed(note, preview: true, dark: false, width: contentSize.width))
+      NoteWriteStyle.attributedForExport(note, width: contentSize.width))
     let storage = NSTextStorage(attributedString: content)
     let layout = NSLayoutManager()
     storage.addLayoutManager(layout)

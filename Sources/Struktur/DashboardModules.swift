@@ -751,29 +751,17 @@ struct ProjectPulseWidget: View {
 struct NoteWidget: View {
   @EnvironmentObject private var store: WorkspaceStore
   var expanded = false
-  @State private var preview = true
+  @State private var controller = NoteEditorController()
   var body: some View {
-    VStack(spacing: 8) {
+    VStack(alignment: .leading, spacing: 8) {
       if expanded {
         MarkdownComposer(
-          text: Binding(get: { store.scratchpad }, set: { store.updateScratchpad($0) }),
-          showingPreview: $preview)
+          text: Binding(get: { store.scratchpad }, set: { store.updateScratchpad($0) }))
       } else {
-        HStack {
-          EditableWording(.notesTitle).font(.strukturSerif(18))
-          Spacer()
-          Button(preview ? "Write" : "Read") { preview.toggle() }.buttonStyle(.plain).font(
-            .system(size: 9))
-        }
-        if preview {
-          ScrollView {
-            MarkdownContent(
-              text: Binding(get: { store.scratchpad }, set: { store.updateScratchpad($0) }))
-          }
-        } else {
-          TextEditor(text: Binding(get: { store.scratchpad }, set: { store.updateScratchpad($0) }))
-            .font(.system(size: 11)).scrollContentBackground(.hidden)
-        }
+        EditableWording(.notesTitle).font(.strukturSerif(18))
+        LiveMarkdownField(
+          text: Binding(get: { store.scratchpad }, set: { store.updateScratchpad($0) }),
+          editorLabel: "Quick notes editor", controller: controller)
       }
     }.padding(.horizontal, 17).padding(.bottom, 15).onDisappear { store.saveNow() }
   }
