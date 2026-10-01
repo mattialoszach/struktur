@@ -13,6 +13,7 @@ mkdir -p Documentation/Images
 
 capture() {
   local name="$1" theme="$2" section="$3" fixture="$4" width="$5" height="$6"
+  if [[ -n "${STRUKTUR_CAPTURE_ONLY:-}" && "$STRUKTUR_CAPTURE_ONLY" != "$name" ]]; then return; fi
   local snapshot="$STRUKTUR_CAPTURE_TEMP/$name.png"
   STRUKTUR_PREVIEW=1 STRUKTUR_THEME="$theme" STRUKTUR_SECTION="$section" \
     STRUKTUR_PREVIEW_FIXTURE="$fixture" STRUKTUR_PREVIEW_ASSISTANT_DELAY_MS=10000 \
@@ -27,7 +28,6 @@ capture() {
   [[ -s "$snapshot" ]] || { print -u2 "No snapshot for $name"; return 1; }
   case "$section" in
     calendar) "$STRUKTUR_CAPTURE_TEMP/ui-check" "$STRUKTUR_CAPTURE_PID" press Week ;;
-    notes) "$STRUKTUR_CAPTURE_TEMP/ui-check" "$STRUKTUR_CAPTURE_PID" press Preview ;;
   esac
   if [[ "$fixture" == assistant ]]; then
     "$STRUKTUR_CAPTURE_TEMP/ui-check" "$STRUKTUR_CAPTURE_PID" press Assistant
