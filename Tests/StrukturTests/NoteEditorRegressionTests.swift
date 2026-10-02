@@ -37,6 +37,52 @@ import XCTest
     XCTAssertLessThanOrEqual(narrow.map(\.maxX).max()!, 350)
   }
 
+  func testEscapeLeavesNoteEditorAndHidesActiveEquationSource() throws {
+    let source = "Inline $x^2$"
+    let (window, view, coordinator) = nativeEditor(NoteDocument(markdown: source)) { _ in }
+    defer { window.contentView = nil }
+    let equation = (source as NSString).range(of: "$x^2$")
+    view.setSelectedRange(NSRange(location: equation.location + 2, length: 0))
+    XCTAssertNil(view.textStorage?.attribute(.noteVisualSource, at: equation.location,
+      effectiveRange: nil))
+    view.cancelOperation(nil)
+    XCTAssertFalse(window.firstResponder === view)
+    XCTAssertNotNil(view.textStorage?.attribute(.noteVisualSource, at: equation.location,
+      effectiveRange: nil))
+    XCTAssertEqual(view.string, source)
+    window.makeFirstResponder(view)
+    XCTAssertTrue(window.firstResponder === view)
+    XCTAssertNil(view.textStorage?.attribute(.noteVisualSource, at: equation.location,
+      effectiveRange: nil))
+    _ = coordinator
+  }
+
+  func testNewNoteDoesNotStartEditingBeforeClick() throws {
+    _ = NSApplication.shared
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = WorkspaceStore(fileURL: directory.appending(path: "workspace.json"))
+    store.replaceWorkspace(Workspace())
+    let id = store.createNote()
+    let host = NSHostingView(rootView: NoteDetailView(noteID: id).environmentObject(store))
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 780, height: 620),
+      styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = host
+    defer { window.contentView = nil }
+    host.layoutSubtreeIfNeeded()
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    func descendants(_ view: NSView) -> [NSView] {
+      [view] + view.subviews.flatMap(descendants)
+    }
+    let views = descendants(host)
+    let title = try XCTUnwrap(views.compactMap { $0 as? NSTextField }
+      .first { $0.accessibilityLabel() == "Note title" })
+    let body = try XCTUnwrap(views.compactMap { $0 as? NoteTextView }.first)
+    XCTAssertFalse(window.firstResponder === title)
+    XCTAssertFalse(window.firstResponder === body)
+  }
+
   func testNativeTypingPerformanceWithHighlightedLongNoteAndStore() throws {
     _ = NSApplication.shared
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)

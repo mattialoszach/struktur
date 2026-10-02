@@ -30,7 +30,7 @@ Organize notes in folders, pin the ones you use often, and search across the lib
 
 ![Light Notes library with folders, a highlighted passage, and a lecture checklist](Documentation/Images/notes-light.webp)
 
-Notes autosave locally and export to Markdown or PDF, including rendered equations. Move into formatted text to edit its syntax; click an equation to edit it with its result updating underneath. In the Focus room, a timer and working notepad sit together; each saved session keeps its own copy of the notes.
+Notes autosave locally and export to Markdown or PDF, including rendered equations. Click a title or note body to write; Escape leaves the field until you click it again. **Formulas** offers ready-to-edit fractions, roots, powers, sums, integrals, limits, and the quadratic formula. Move into formatted text to edit its syntax; click an equation to edit it with its result updating underneath. In the Focus room, a timer and working notepad sit together; each saved session keeps its own copy of the notes.
 
 ## A hand when you need one
 

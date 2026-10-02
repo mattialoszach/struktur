@@ -216,7 +216,8 @@ struct NoteNativeEditor: NSViewRepresentable {
       }
       styler.apply(
         to: storage, note: note, dark: dark,
-        selection: parent.readOnly ? NSRange(location: NSNotFound, length: 0) : selection,
+        selection: parent.readOnly || (view.window != nil && view.window?.firstResponder !== view)
+          ? NSRange(location: NSNotFound, length: 0) : selection,
         width: max(80, parent.availableWidth - 50))
       resetTypingAttributes(view, dark: dark)
       let location = min(selection.location, storage.length)
@@ -309,7 +310,9 @@ struct NoteNativeEditor: NSViewRepresentable {
         applying = true
         view.textContentStorage?.performEditingTransaction {
           styler.select(
-            range, in: storage, note: note, dark: lastDark,
+            view.window == nil || view.window?.firstResponder === view
+              ? range : NSRange(location: NSNotFound, length: 0),
+            in: storage, note: note, dark: lastDark,
             width: max(80, parent.availableWidth - 50))
         }
         resetTypingAttributes(view, dark: lastDark)
@@ -318,6 +321,31 @@ struct NoteNativeEditor: NSViewRepresentable {
       }
       let controller = parent.controller
       DispatchQueue.main.async { if controller.selection != range { controller.selection = range } }
+    }
+    func textDidBeginEditing(_ notification: Notification) {
+      if let view = notification.object as? NoteTextView, view.window != nil {
+        focusChanged(view, active: true)
+      }
+    }
+    func textDidEndEditing(_ notification: Notification) {
+      if let view = notification.object as? NoteTextView, view.window != nil {
+        focusChanged(view, active: false)
+      }
+    }
+    func focusChanged(_ view: NoteTextView, active: Bool) {
+      guard let storage = view.textStorage,
+        let note = lastNote, !view.hasMarkedText()
+      else { return }
+      applying = true
+      view.textContentStorage?.performEditingTransaction {
+        styler.select(
+          active ? view.selectedRange() : NSRange(location: NSNotFound, length: 0),
+          in: storage, note: note, dark: lastDark,
+          width: max(80, parent.availableWidth - 50))
+      }
+      resetTypingAttributes(view, dark: lastDark)
+      applying = false
+      view.needsDisplay = true
     }
     nonisolated func textLayoutManager(
       _ manager: NSTextLayoutManager,
@@ -341,6 +369,26 @@ struct NoteNativeEditor: NSViewRepresentable {
 
 final class NoteTextView: NSTextView {
   var imageHandler: ((Data, String) -> Void)?
+
+  override func becomeFirstResponder() -> Bool {
+    let accepted = super.becomeFirstResponder()
+    if accepted, window != nil {
+      (delegate as? NoteNativeEditor.Coordinator)?.focusChanged(self, active: true)
+    }
+    return accepted
+  }
+
+  override func resignFirstResponder() -> Bool {
+    let accepted = super.resignFirstResponder()
+    if accepted, window != nil {
+      (delegate as? NoteNativeEditor.Coordinator)?.focusChanged(self, active: false)
+    }
+    return accepted
+  }
+
+  override func cancelOperation(_ sender: Any?) {
+    window?.makeFirstResponder(window)
+  }
 
   override func paste(_ sender: Any?) {
     if consumeImage(NSPasteboard.general) { return }

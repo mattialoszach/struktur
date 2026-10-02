@@ -9,12 +9,65 @@ struct NoteEditorToolbar: View {
   var chooseImage: () -> Void
   @State private var showingTextColors = false
   @State private var showingHighlights = false
+  @State private var formulasHovered = false
+  @State private var insertHovered = false
 
   var body: some View {
     NoteToolbarLayout {
-      HStack(spacing: 9) { formatButtons }
+      HStack(spacing: 9) {
+        formatButtons
+        formulaMenu
+      }
       insertMenu
     }
+  }
+  private var formulaMenu: some View {
+    Menu {
+      Section("Inline") {
+        Button("Fraction · a / b") {
+          insertFormula(#"\frac{a}{b}"#, selecting: "a")
+        }
+        Button("Square root · √x") {
+          insertFormula(#"\sqrt{x}"#, selecting: "x")
+        }
+        Button("Power · xⁿ") {
+          insertFormula("x^{n}", selecting: "n")
+        }
+        Button("Greek letter · α") {
+          insertFormula(#"\alpha"#, selecting: #"\alpha"#)
+        }
+      }
+      Section("Display") {
+        Button("Summation") {
+          insertFormula(#"\sum_{i=1}^{n} i"#, display: true, selecting: "i=1")
+        }
+        Button("Integral") {
+          insertFormula(#"\int_{a}^{b} f(x)\,dx"#, display: true, selecting: "f(x)")
+        }
+        Button("Limit") {
+          insertFormula(#"\lim_{x \to a} f(x)"#, display: true, selecting: "f(x)")
+        }
+        Button("Quadratic formula") {
+          insertFormula(#"x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}"#,
+            display: true, selecting: "-b")
+        }
+      }
+    } label: {
+      Label("Formulas", systemImage: "function")
+        .font(.system(size: 11, weight: .medium))
+        .padding(.horizontal, 8).frame(height: 28)
+        .background(
+          formulasHovered ? StrukturTheme.hairline : .clear,
+          in: RoundedRectangle(cornerRadius: 6))
+    }
+    .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("Insert math formula")
+    .onHover { formulasHovered = $0 }
+    .animation(.easeOut(duration: 0.12), value: formulasHovered)
+  }
+  private func insertFormula(_ latex: String, display: Bool = false, selecting placeholder: String) {
+    let source = display ? "\n$$\n\(latex)\n$$\n" : "$\(latex)$"
+    let range = (source as NSString).range(of: placeholder)
+    controller.insert(source, selectOffset: range.location, selectLength: range.length)
   }
 
   @ViewBuilder private var formatButtons: some View {
@@ -116,9 +169,16 @@ struct NoteEditorToolbar: View {
       Button("Link to workspace item…") { showLinks() }
       Button("Image from file…", systemImage: "photo") { chooseImage() }
     } label: {
-      Label("Insert", systemImage: "plus").font(.system(size: 11, weight: .medium))
+      Label("Insert", systemImage: "plus")
+        .font(.system(size: 11, weight: .medium))
+        .padding(.horizontal, 8).frame(height: 28)
+        .background(
+          insertHovered ? StrukturTheme.hairline : .clear,
+          in: RoundedRectangle(cornerRadius: 6))
     }
     .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("Insert into note")
+    .onHover { insertHovered = $0 }
+    .animation(.easeOut(duration: 0.12), value: insertHovered)
   }
   private func decorate(_ color: NoteColor?, highlight: Bool) {
     let selection = controller.selection

@@ -233,7 +233,7 @@ import AppKit
     let raw = text.string
     let full = NSRange(location: 0, length: text.length)
     if let heading = Self.matches(#"^(#{1,6})[ \t]+"#, raw).first {
-      let size = CGFloat(max(16, 29 - heading.range(at: 1).length * 3))
+      let size = CGFloat([34, 27, 22, 19, 16, 14][heading.range(at: 1).length - 1])
       text.addAttribute(
         .font, value: NSFont(name: "Georgia", size: size) ?? NSFont.systemFont(ofSize: size),
         range: full)

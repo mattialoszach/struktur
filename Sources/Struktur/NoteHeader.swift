@@ -8,6 +8,7 @@ struct NoteHeader: View {
   var exportMarkdown: (NoteDocument) -> Void
   var exportPDF: (NoteDocument) -> Void
   var confirmDeletion: () -> Void
+  @State private var actionsHovered = false
   private var noteID: UUID { note.id }
 
   var body: some View {
@@ -55,8 +56,13 @@ struct NoteHeader: View {
           }
         } label: {
           Image(systemName: "ellipsis").frame(width: 24, height: 24)
+            .background(
+              actionsHovered ? StrukturTheme.hairline : .clear,
+              in: RoundedRectangle(cornerRadius: 6))
         }
         .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("Note actions")
+        .onHover { actionsHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: actionsHovered)
       }
       NoteTitleField(
         note: note,
@@ -81,6 +87,7 @@ private struct NoteTitleField: NSViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator(self) }
   func makeNSView(context: Context) -> NoteTitleTextField {
     let field = NoteTitleTextField()
+    field.cell = CenteredNoteTitleCell(textCell: "")
     field.isBordered = false
     field.isBezeled = false
     field.drawsBackground = false
@@ -91,7 +98,6 @@ private struct NoteTitleField: NSViewRepresentable {
     field.usesSingleLineMode = true
     field.lineBreakMode = .byClipping
     field.delegate = context.coordinator
-    field.focusOnAttach = note.title == "Untitled note" && note.markdown.isEmpty
     field.setAccessibilityLabel("Note title")
     updateNSView(field, context: context)
     return field
@@ -118,6 +124,10 @@ private struct NoteTitleField: NSViewRepresentable {
     }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool
     {
+      if selector == #selector(NSResponder.cancelOperation(_:)) {
+        control.window?.makeFirstResponder(control.window)
+        return true
+      }
       guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
       parent.onSubmit()
       return true
@@ -126,18 +136,18 @@ private struct NoteTitleField: NSViewRepresentable {
 }
 
 private final class NoteTitleTextField: NSTextField {
-  var focusOnAttach = false
   override var intrinsicContentSize: NSSize {
     NSSize(width: NSView.noIntrinsicMetric, height: 38)
   }
-  override func viewDidMoveToWindow() {
-    super.viewDidMoveToWindow()
-    guard focusOnAttach, window != nil else { return }
-    focusOnAttach = false
-    DispatchQueue.main.async { [weak self] in
-      guard let self, let window = self.window else { return }
-      window.makeFirstResponder(self)
-      self.selectText(nil)
-    }
+}
+
+private final class CenteredNoteTitleCell: NSTextFieldCell {
+  override func drawInterior(withFrame cellFrame: NSRect, in controlView: NSView) {
+    // AppKit paints an idle borderless field above its field editor. Align the
+    // idle glyphs with the editor so clicking the title cannot move the text.
+    let offset = (font?.pointSize ?? 30) / 2
+    super.drawInterior(
+      withFrame: cellFrame.offsetBy(dx: 0, dy: controlView.isFlipped ? offset : -offset),
+      in: controlView)
   }
 }

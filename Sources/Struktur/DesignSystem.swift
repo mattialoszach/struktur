@@ -101,6 +101,7 @@ struct StrukturInputModifier: ViewModifier {
           isFocused ? StrukturTheme.ink.opacity(0.24) : StrukturTheme.hairline)
       }
       .focused($isFocused)
+      .onExitCommand { isFocused = false }
   }
 }
 
@@ -375,8 +376,18 @@ struct IconButton: View {
         .frame(width: 26, height: 26)
         .background(
           hovered ? StrukturTheme.hairline : .clear, in: RoundedRectangle(cornerRadius: 6))
-    }.buttonStyle(.plain).foregroundStyle(StrukturTheme.muted)
+    }.buttonStyle(NotePressButtonStyle()).foregroundStyle(hovered ? StrukturTheme.ink : StrukturTheme.muted)
       .onHover { hovered = $0 }.help(label).accessibilityLabel(label)
+      .animation(.easeOut(duration: 0.12), value: hovered)
+  }
+}
+
+private struct NotePressButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .scaleEffect(configuration.isPressed ? 0.92 : 1)
+      .opacity(configuration.isPressed ? 0.7 : 1)
+      .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
   }
 }
 

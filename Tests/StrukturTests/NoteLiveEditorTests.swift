@@ -35,6 +35,28 @@ import XCTest
     XCTAssertNotNil(at("- [ ]", .noteCheckbox))
   }
 
+  func testHeadingLevelsHaveClearSizeSteps() throws {
+    let source = "# One\n## Two\n### Three\n#### Four\n##### Five\n###### Six\nBody"
+    let text = styled(source)
+    let sizes = ["One", "Two", "Three", "Four", "Five", "Six", "Body"].map { word in
+      (text.attribute(.font, at: (source as NSString).range(of: word).location,
+        effectiveRange: nil) as? NSFont)?.pointSize ?? 0
+    }
+    XCTAssertEqual(sizes, [34, 27, 22, 19, 16, 14, 14])
+    XCTAssertEqual(text.string, source)
+  }
+
+  func testFormulaPickerExamplesRenderOffline() {
+    for source in [
+      #"\frac{a}{b}"#, #"\sqrt{x}"#, "x^{n}", #"\alpha"#,
+      #"\sum_{i=1}^{n} i"#, #"\int_{a}^{b} f(x)\,dx"#,
+      #"\lim_{x \to a} f(x)"#,
+      #"x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}"#,
+    ] {
+      XCTAssertNotNil(NoteMath.render(source, display: true, dark: false).image, source)
+    }
+  }
+
   func testMathRendersCachesAndRevealsSourceWhileEditing() throws {
     let source = #"Inline $\frac{a}{b}$ and \(x^2\)."#
     let storage = styled(source)
